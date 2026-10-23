@@ -84,7 +84,7 @@ def main() -> None:
 
     ns_name = namespace_name(args.dataset, args.scope)
     ns = client().namespace(ns_name)
-    print(f"Loading {len(rows):,} products into {ns_name} ({REGION}), embedding with {EMBED_MODEL}")
+    print(f"Loading {len(rows):,} products into {ns_name} ({REGION}), embedding with {EMBED_MODEL}", flush=True)
 
     batches = [rows[i:i + BATCH] for i in range(0, len(rows), BATCH)]
     totals = {"rows": 0, "bytes": 0, "tokens": 0}
@@ -121,7 +121,7 @@ def main() -> None:
             if i % 20 == 0 or i == len(batches):
                 elapsed = time.perf_counter() - started
                 print(f"  {i:>5}/{len(batches)} batches  {totals['rows']:>8,} rows  "
-                      f"{totals['tokens'] / 1e6:6.1f}M tokens  {elapsed / 60:5.1f} min")
+                      f"{totals['tokens'] / 1e6:6.1f}M tokens  {elapsed / 60:5.1f} min", flush=True)
 
     elapsed = time.perf_counter() - started
     print(f"Done in {elapsed / 60:.1f} min: {totals['rows']:,} rows, "

@@ -79,8 +79,8 @@ def main() -> None:
               AND contains(lower(e.query), lower(p.product_brand))
         )
         SELECT '{DATASET}', q.query_id, q.query, 'test',
-               CASE WHEN len(string_split(trim(q.query), ' ')) <= 2 THEN 'short'
-                    WHEN len(string_split(trim(q.query), ' ')) <= 5 THEN 'medium'
+               CASE WHEN len(regexp_split_to_array(trim(q.query), '\\s+')) <= 2 THEN 'short'
+                    WHEN len(regexp_split_to_array(trim(q.query), '\\s+')) <= 5 THEN 'medium'
                     ELSE 'long' END
                || '|' || CASE WHEN b.query_id IS NULL THEN 'no-brand' ELSE 'brand' END,
                FALSE
@@ -89,6 +89,8 @@ def main() -> None:
 
     # Proportional stratified sample: rank queries inside each slice by a
     # seeded hash, then take the lowest fractional ranks across all slices.
+    # DuckDB's hash() can change between major versions, so a DuckDB upgrade
+    # can change the sample; runs record a sample fingerprint, so scoring notices.
     con.execute(f"""
         UPDATE queries SET sampled = TRUE
         WHERE dataset = '{DATASET}' AND query_id IN (
@@ -98,7 +100,7 @@ def main() -> None:
                          / count(*) OVER (PARTITION BY slice) AS frac
                 FROM queries WHERE dataset = '{DATASET}'
             )
-            ORDER BY frac, query_id
+            ORDER BY frac, hash(query_id || '{args.seed}')  -- seeded tie-break, so slices take turns fairly
             LIMIT {args.sample}
         )
     """)

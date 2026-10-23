@@ -38,8 +38,16 @@ def per_query_sql(gain: str = "exp") -> str:
         WHERE r.dataset = $dataset AND r.run_id IN (SELECT unnest($run_ids))
     ),
     j AS (
-        SELECT query_id, doc_id, grade FROM judgments
+        -- Human labels cover a fixed set of products per query. A model judge
+        -- only grades what was pooled, so its ideal ranking is built from the
+        -- top 10 of the runs being scored and nothing else; grades left over
+        -- from other runs or samples would shift the scores.
+        SELECT query_id, doc_id, grade FROM judgments jj
         WHERE dataset = $dataset AND source = $judge
+          AND ($judge = 'human' OR EXISTS (
+                SELECT 1 FROM results p
+                WHERE p.run_id IN (SELECT unnest($run_ids)) AND p.rank <= 10
+                  AND p.query_id = jj.query_id AND p.doc_id = jj.doc_id))
     ),
     graded AS (
         SELECT res.run_id, res.query_id, res.rank, j.grade
@@ -86,14 +94,38 @@ def per_query_sql(gain: str = "exp") -> str:
 
 
 def bootstrap_ci(values: list[float], draws: int = 1000, seed: int = 0) -> tuple[float, float]:
-    """95% interval for the mean, resampling queries with replacement."""
+    """95% percentile interval for the mean, resampling queries with replacement."""
     if len(values) < 2:
         return (float("nan"), float("nan"))
     values = sorted(values)  # SQL row order isn't stable; sorting makes the draw reproducible
     rng = random.Random(seed)
     n = len(values)
     means = sorted(sum(rng.choices(values, k=n)) / n for _ in range(draws))
-    return means[int(0.025 * draws)], means[int(0.975 * draws) - 1]
+    # With 1,000 draws: the 25th smallest and the 975th smallest.
+    return means[round(0.025 * draws) - 1], means[round(0.975 * draws) - 1]
+
+
+def per_query(con: duckdb.DuckDBPyConnection, dataset: str, run_ids: list[str],
+              judge: str = "human", gain: str = "exp") -> dict[tuple[str, str], dict[str, float | None]]:
+    """{(run_id, query_id): {metric: value}} for every sampled query."""
+    rows = con.execute(per_query_sql(gain), {"dataset": dataset, "run_ids": run_ids, "judge": judge}).fetchall()
+    return {(run_id, qid): dict(zip(METRICS, vals)) for run_id, qid, _slice, *vals in rows}
+
+
+def paired_delta(a: dict[str, float], b: dict[str, float], draws: int = 1000,
+                 seed: int = 0) -> tuple[float, float, float, int]:
+    """Mean of (a - b) over queries both runs scored, with a 95% bootstrap interval.
+
+    Comparing two runs on the same queries this way is much tighter than
+    checking whether their separate intervals overlap, because most of the
+    query-to-query variation cancels out.
+    """
+    diffs = [a[q] - b[q] for q in sorted(a.keys() & b.keys())
+             if a[q] is not None and b[q] is not None]
+    if not diffs:
+        return (float("nan"), float("nan"), float("nan"), 0)
+    lo, hi = bootstrap_ci(diffs, draws, seed)
+    return (sum(diffs) / len(diffs), lo, hi, len(diffs))
 
 
 def score(con: duckdb.DuckDBPyConnection, dataset: str, run_ids: list[str],

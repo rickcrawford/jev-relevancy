@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS judgments (
     prob      DOUBLE,             -- judge confidence, when the judge gives one
     PRIMARY KEY (dataset, query_id, doc_id, source)
 );
+-- Expected grade (sum of grade x probability) from judges that return a
+-- distribution, like Jev or an LLM read through logprobs.
+ALTER TABLE judgments ADD COLUMN IF NOT EXISTS expected DOUBLE;
 
 CREATE TABLE IF NOT EXISTS runs (
     run_id      VARCHAR PRIMARY KEY,

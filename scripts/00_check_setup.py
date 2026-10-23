@@ -55,14 +55,18 @@ def main() -> None:
         warn("load a namespace first (scripts/03_load_turbopuffer.py), then rerun this check")
         return
     ns = tp.namespace(loaded[0])
-    probe = ns.query(rank_by=("id", "asc"), top_k=1).rows[0].id
+    first = ns.query(rank_by=("id", "asc"), top_k=1).rows
+    if not first:
+        warn(f"{loaded[0]} is empty; rerun scripts/03_load_turbopuffer.py")
+        return
+    probe = first[0].id
     for model in RERANKERS:
         try:
             ns.query(rank_by=("id", "asc"), filters=("id", "Eq", probe), top_k=1,
                      include_attributes=["text"],
                      rerank_by={"model": model, "attribute": "text", "query": "test"})
             ok(model)
-        except Exception as e:  # the API explains what's wrong; show it
+        except Exception as e:  # noqa: BLE001  the API explains what's wrong; show it
             msg = str(e).split("rerank_by`:")[-1].split("', 'status'")[0].strip(" '")
             warn(f"{model}: {msg[:110]}")
 

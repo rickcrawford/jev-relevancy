@@ -77,10 +77,15 @@ def _hits(resp, rows, started: float) -> Hits:
 
 
 def search(ns, retriever: str, q: str, k: int = TOP_K) -> Hits:
-    """Run one first-stage retriever: bm25, ann, or hybrid-rrf."""
+    """Run one first-stage retriever: bm25, bm25-title, ann, or hybrid-rrf."""
     started = time.perf_counter()
     if retriever == "bm25":
         resp = ns.query(rank_by=bm25_rank_by(q), top_k=k)
+        return _hits(resp, resp.rows or [], started)
+    if retriever == "bm25-title":
+        # Deliberately weak: titles only. Project 2 needs a spread of quality
+        # to test whether a judge ranks systems the way humans do.
+        resp = ns.query(rank_by=("title", "BM25", q), top_k=k)
         return _hits(resp, resp.rows or [], started)
     if retriever == "ann":
         resp = ns.query(rank_by=ann_rank_by(q), top_k=k)
