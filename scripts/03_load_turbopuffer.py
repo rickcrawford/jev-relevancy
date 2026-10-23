@@ -17,7 +17,10 @@ Each document gets:
                 embedded by turbopuffer and read by model rerankers
   brand, color  filterable attributes
 
-Re-running is safe: writes are upserts keyed on the product id.
+Re-running is safe: writes are upserts keyed on the product id. If a load
+stops partway (a long full load can outlast the rate-limit retries), rerun
+with --resume to write only the products the namespace doesn't have yet,
+instead of paying to embed everything again.
 """
 
 import argparse
@@ -60,6 +63,8 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=8, help="concurrent write requests")
     ap.add_argument("--tokens-per-minute", type=int, default=1_500_000,
                     help="embedding budget to pace against; your org's limit is shown in the console")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip products already in the namespace")
     args = ap.parse_args()
 
     con = connect()
@@ -84,10 +89,26 @@ def main() -> None:
 
     ns_name = namespace_name(args.dataset, args.scope)
     ns = client().namespace(ns_name)
+
+    if args.resume:
+        # turbopuffer has no export endpoint; the documented way to list a
+        # namespace is to page through it in id order, 10,000 ids at a time.
+        have, last = set(), None
+        while True:
+            page = ns.query(rank_by=("id", "asc"), top_k=10_000,
+                            filters=("id", "Gt", last) if last is not None else None).rows or []
+            have.update(str(r.id) for r in page)
+            if len(page) < 10_000:
+                break
+            last = page[-1].id
+        rows = [r for r in rows if r[0] not in have]
+        print(f"--resume: {len(have):,} products already in {ns_name}, {len(rows):,} to go", flush=True)
+        if not rows:
+            return
     print(f"Loading {len(rows):,} products into {ns_name} ({REGION}), embedding with {EMBED_MODEL}", flush=True)
 
     batches = [rows[i:i + BATCH] for i in range(0, len(rows), BATCH)]
-    totals = {"rows": 0, "bytes": 0, "tokens": 0}
+    totals = {"rows": 0, "bytes": 0, "tokens": 0, "failed": 0}
     started = time.perf_counter()
 
     pacer = Pacer(args.tokens_per_minute)
@@ -108,13 +129,16 @@ def main() -> None:
                 )
             except RateLimitError:
                 if attempt == 5:
-                    raise
+                    return None  # counted below; --resume picks these up later
                 time.sleep(15 * 2 ** attempt)  # 15s, 30s, 60s, ... gives the minute window time to reset
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [pool.submit(write, b) for b in batches]
         for i, fut in enumerate(as_completed(futures), 1):
             resp = fut.result()
+            if resp is None:
+                totals["failed"] += 1
+                continue
             totals["rows"] += resp.rows_upserted or 0
             totals["bytes"] += resp.billing.billable_logical_bytes_written or 0
             totals["tokens"] += getattr(resp.performance, "embedding_tokens", 0) or 0
@@ -126,6 +150,9 @@ def main() -> None:
     elapsed = time.perf_counter() - started
     print(f"Done in {elapsed / 60:.1f} min: {totals['rows']:,} rows, "
           f"{totals['bytes'] / 1e6:,.0f} MB billable writes, {totals['tokens'] / 1e6:.1f}M embedding tokens")
+    if totals["failed"]:
+        print(f"{totals['failed']} batches still hit the rate limit after retries. "
+              f"Rerun with --resume to load just those.")
 
 
 if __name__ == "__main__":

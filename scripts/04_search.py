@@ -69,7 +69,8 @@ def main() -> None:
         latencies.sort()
         print(f"{run_id:<28} {len(queries)} queries, p50 {latencies[len(latencies) // 2]:.0f} ms")
 
-    print("\nNext: uv run scripts/05_score.py")
+    flag = "" if args.dataset == "esci-us" else f" --dataset {args.dataset}"
+    print(f"\nNext: uv run scripts/05_score.py{flag}")
 
 
 if __name__ == "__main__":

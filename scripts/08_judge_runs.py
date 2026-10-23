@@ -134,6 +134,17 @@ def main() -> None:
         """, [run_ids, judges]).fetchall()
         for row in table:
             print(f"  {row[0]:<40} {row[1]:<28} nDCG@10 {row[2]:.3f} {row[3]}")
+        # nDCG is undefined for a query with nothing relevant to find, so
+        # those queries drop out of the averages. Say how many.
+        for judge in judges:
+            empty, total = con.execute("""
+                SELECT count(*) FILTER (WHERE best = 0), count(*) FROM (
+                    SELECT max(grade) AS best FROM judgments j JOIN queries q USING (dataset, query_id)
+                    WHERE j.dataset = ? AND j.source = ? AND q.sampled GROUP BY query_id)
+            """, [args.dataset, judge]).fetchall()[0]
+            if empty:
+                print(f"  {judge}: {empty} of {total} queries had nothing graded above 0 in any "
+                      "run's top 10, so nDCG leaves them out")
         print(f"\nNo human labels on {args.dataset}, so the judge's grades are the labels.")
         print("For paired differences between runs, score with one judge:")
         print(f"  uv run scripts/05_score.py --dataset {args.dataset} --judge {judges[0]}")
