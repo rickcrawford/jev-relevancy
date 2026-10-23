@@ -1,4 +1,4 @@
-"""Grade (query, product) pairs with an LLM on OpenRouter, Jev style.
+"""Grade (query, result) pairs with an LLM on OpenRouter, Jev style.
 
 Jev answers a relevance question with a probability for each grade instead
 of free text. A small instruct model can do the same: ask for a single digit,
@@ -16,20 +16,13 @@ from dataclasses import dataclass
 import httpx
 from dotenv import load_dotenv
 
+from relevancy.rubric import Rubric
 from relevancy.warehouse import ROOT
 
 load_dotenv(ROOT / ".env")
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Amazon's ESCI definitions, condensed. Grades match the warehouse: 3/2/1/0.
-RUBRIC = """You judge how well a product matches an Amazon shopping query, using Amazon's ESCI guidelines.
-Reply with one digit and nothing else.
-
-3 = Exact: relevant, and satisfies every specification in the query (brand, size, color, quantity, and so on).
-2 = Substitute: somewhat relevant. It misses some part of the query but could still do the job instead.
-1 = Complement: doesn't fulfill the query, but is something you'd use together with an exact match.
-0 = Irrelevant: irrelevant, or fails a central part of the query."""
 
 GRADES = ("0", "1", "2", "3")
 
@@ -60,12 +53,12 @@ def _failed(error: str | None) -> Grade:
     return Grade(None, None, None, float("nan"), None, None, error=error or "unknown error")
 
 
-def grade(http: httpx.Client, model: str, query: str, product: str) -> Grade:
+def grade(http: httpx.Client, model: str, query: str, product: str, rubric: Rubric) -> Grade:
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": RUBRIC},
-            {"role": "user", "content": f"Query: {query}\n\nProduct: {product}\n\nGrade:"},
+            {"role": "system", "content": rubric.llm_prompt},
+            {"role": "user", "content": rubric.llm_user(query, product)},
         ],
         "max_tokens": 1,
         "temperature": 0,

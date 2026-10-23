@@ -1,6 +1,13 @@
 -- Search Quality Lab warehouse.
--- Every script reads from and writes to these six tables, so a new dataset,
+-- Every script reads from and writes to these tables, so a new dataset,
 -- retriever, reranker, or judge is a new set of rows rather than new code.
+
+-- One row per dataset: which rubric (rubrics/<name>.toml) judges grade it with.
+CREATE TABLE IF NOT EXISTS datasets (
+    dataset      VARCHAR PRIMARY KEY,
+    rubric       VARCHAR NOT NULL DEFAULT 'generic',
+    description  VARCHAR
+);
 
 CREATE TABLE IF NOT EXISTS queries (
     dataset   VARCHAR NOT NULL,   -- e.g. 'esci-us'
@@ -16,7 +23,7 @@ CREATE TABLE IF NOT EXISTS docs (
     dataset     VARCHAR NOT NULL,
     doc_id      VARCHAR NOT NULL,
     title       VARCHAR,
-    body        VARCHAR,          -- description + bullet points
+    body        VARCHAR,          -- main text; for ESCI, description + bullet points
     brand       VARCHAR,
     color       VARCHAR,
     PRIMARY KEY (dataset, doc_id)
@@ -26,8 +33,8 @@ CREATE TABLE IF NOT EXISTS judgments (
     dataset   VARCHAR NOT NULL,
     query_id  VARCHAR NOT NULL,
     doc_id    VARCHAR NOT NULL,
-    source    VARCHAR NOT NULL,   -- 'human', or 'jev-v1', 'jev-v2', ...
-    grade     INTEGER NOT NULL,   -- 3 Exact, 2 Substitute, 1 Complement, 0 Irrelevant
+    source    VARCHAR NOT NULL,   -- 'human', or a judge: 'jev-batched:jev-1.13.0', 'openai/gpt-4o-mini', ...
+    grade     INTEGER NOT NULL,   -- 0 to 3, highest best; ESCI: 3 Exact, 2 Substitute, 1 Complement, 0 Irrelevant
     prob      DOUBLE,             -- judge confidence, when the judge gives one
     PRIMARY KEY (dataset, query_id, doc_id, source)
 );
@@ -39,7 +46,7 @@ CREATE TABLE IF NOT EXISTS runs (
     run_id      VARCHAR PRIMARY KEY,
     dataset     VARCHAR NOT NULL,
     retriever   VARCHAR NOT NULL, -- 'bm25', 'ann', 'hybrid-rrf', ...
-    reranker    VARCHAR NOT NULL, -- 'none', 'jev', 'cross-encoder', ...
+    reranker    VARCHAR NOT NULL, -- 'none', 'voyage/rerank-3', 'jev:jev-1.13.0', ...
     config      JSON,             -- everything needed to rerun it
     git_sha     VARCHAR,
     started_at  TIMESTAMP DEFAULT current_timestamp

@@ -17,7 +17,8 @@ Three kinds of reranker, picked by the --model prefix:
   uv run scripts/06_rerank.py --model typesafe/jev-1.13.0   # Jev inside turbopuffer, if enabled
   uv run scripts/05_score.py
 
-Jev and LLM rerankers sort by expected grade (sum of grade x probability) and
+Jev and LLM rerankers grade each candidate against the dataset's rubric
+(rubrics/<name>.toml), sort by expected grade (sum of grade x probability) and
 break ties with the original rank. Latency recorded for a reranked run (wall
 clock and server) is end to end: retrieval plus reranking. Jev and LLM calls
 aren't turbopuffer queries, so their server time is the base run's only.
@@ -31,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from relevancy import jev, llm_judge
 from relevancy.judges import grade_pairs
+from relevancy.rubric import for_dataset
 from relevancy.tpuf import client, rerank
 from relevancy.warehouse import connect, git_sha, sample_id
 
@@ -64,6 +66,7 @@ def main() -> None:
                 raise SystemExit("No hybrid-rrf run on the current query sample. "
                                  "Run scripts/04_search.py first.")
         base_id, retriever, base_config = base
+        rubric = for_dataset(con, args.dataset)
 
         # Per query: the candidate ids in rank order, their text, and the base timings.
         candidates = con.execute("""
@@ -87,9 +90,11 @@ def main() -> None:
     elif kind == "jev":
         jev.client()  # fail fast if TYPESAFE_API_KEY is missing
         judge = f"jev-batched:{name}"  # all 50 candidates in one request per query
+        config["rubric"] = rubric.name
     elif kind == "llm":
         llm_judge.client()  # fail fast if OPENROUTER_API_KEY is missing
         judge = f"llm:{name}"
+        config["rubric"] = rubric.name
     else:
         raise SystemExit(f"unknown reranker prefix {kind!r}; use jev: or llm:, or a turbopuffer model name")
 
@@ -106,7 +111,7 @@ def main() -> None:
         # candidate, 10 at a time. A failed call comes back ungraded, not as a crash.
         started = time.perf_counter()
         pairs = [(query_id, doc_id, text, t) for doc_id, t in zip(ids, texts)]
-        grades = dict(zip(ids, grade_pairs(judge, pairs, workers=10)))
+        grades = dict(zip(ids, grade_pairs(judge, pairs, rubric, workers=10)))
         elapsed = (time.perf_counter() - started) * 1000
         failed = sum(grades[i].expected is None for i in ids)
         if failed:

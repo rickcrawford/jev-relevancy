@@ -34,6 +34,7 @@ import pyarrow as pa
 
 from relevancy.agreement import pearson, weighted_kappa
 from relevancy.judges import grade_pairs
+from relevancy.rubric import for_dataset
 from relevancy.warehouse import connect
 
 JUDGES = [
@@ -56,6 +57,7 @@ def main() -> None:
     args = ap.parse_args()
 
     with connect() as con:
+        rubric = for_dataset(con, args.dataset)
         pairs = con.execute(f"""
             SELECT query_id, doc_id, q.text,
                    concat_ws('. ', d.title, d.brand, d.color, left(d.body, 800)), grade
@@ -76,7 +78,7 @@ def main() -> None:
 
     summary = []
     for judge in args.judge or JUDGES:
-        out = grade_pairs(judge, pairs, args.workers)
+        out = grade_pairs(judge, pairs, rubric, args.workers)
         ok = [(p[4], g) for p, g in zip(pairs, out) if g.grade is not None]
         if not ok:
             first_error = next((g.error for g in out if g.error), "no grades")

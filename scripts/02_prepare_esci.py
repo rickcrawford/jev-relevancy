@@ -38,6 +38,12 @@ def main() -> None:
         WHERE product_locale = 'us';
     """)
 
+    # One transaction, so a failure partway leaves the warehouse as it was.
+    con.begin()
+
+    con.execute("INSERT OR REPLACE INTO datasets VALUES (?, 'esci', ?)",
+                [DATASET, "Amazon Shopping Queries (ESCI), reduced English test set"])
+
     # Corpus: every product judged for any reduced English query, train or test.
     # Train-only products stay in as distractors, which keeps retrieval honest.
     con.execute("DELETE FROM docs WHERE dataset = ?", [DATASET])
@@ -56,10 +62,9 @@ def main() -> None:
     # Human labels for the test queries. Grades follow the ESCI order.
     con.execute("DELETE FROM judgments WHERE dataset = ? AND source = 'human'", [DATASET])
     con.execute(f"""
-        INSERT INTO judgments
+        INSERT INTO judgments (dataset, query_id, doc_id, source, grade)
         SELECT '{DATASET}', query_id, product_id, 'human',
-               CASE esci_label WHEN 'E' THEN 3 WHEN 'S' THEN 2 WHEN 'C' THEN 1 ELSE 0 END,
-               NULL
+               CASE esci_label WHEN 'E' THEN 3 WHEN 'S' THEN 2 WHEN 'C' THEN 1 ELSE 0 END
         FROM examples WHERE split = 'test'
     """)
 
@@ -104,6 +109,8 @@ def main() -> None:
             LIMIT {args.sample}
         )
     """)
+
+    con.commit()
 
     print(con.sql(f"""
         SELECT (SELECT count(*) FROM docs WHERE dataset = '{DATASET}') AS docs,

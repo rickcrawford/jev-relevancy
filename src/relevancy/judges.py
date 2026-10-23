@@ -1,4 +1,4 @@
-"""Run any judge over (query, product) pairs.
+"""Run any judge over (query, result) pairs, graded against a rubric.
 
 A judge name says which grader to use:
   jev:jev-1.13.0          Jev via TypeSafe's API, one request per pair
@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from relevancy import jev, llm_judge
 from relevancy.llm_judge import Grade
+from relevancy.rubric import Rubric
 
 # A pair is (query_id, doc_id, query_text, product_text, ...); extra fields are ignored.
 Pair = tuple
@@ -36,7 +37,7 @@ def model_of(judge: str) -> str:
     return _split(judge)[1]
 
 
-def grade_pairs(judge: str, pairs: list[Pair], workers: int = 8) -> list[Grade]:
+def grade_pairs(judge: str, pairs: list[Pair], rubric: Rubric, workers: int = 8) -> list[Grade]:
     """Return one Grade per pair, in the same order."""
     kind, model = _split(judge)
     if kind == "jev":
@@ -44,7 +45,7 @@ def grade_pairs(judge: str, pairs: list[Pair], workers: int = 8) -> list[Grade]:
 
         def one(p):
             try:
-                return jev.grade_products(client, p[2], {p[1]: p[3]}, model=model)[p[1]]
+                return jev.grade_products(client, p[2], {p[1]: p[3]}, rubric, model=model)[p[1]]
             except Exception as e:  # noqa: BLE001  (one bad pair must not sink the batch)
                 return _failed(e)
 
@@ -61,7 +62,7 @@ def grade_pairs(judge: str, pairs: list[Pair], workers: int = 8) -> list[Grade]:
 
         def batch(qid):
             try:
-                return jev.grade_products(client, text_of[qid], by_query[qid], model=model)
+                return jev.grade_products(client, text_of[qid], by_query[qid], rubric, model=model)
             except Exception as e:  # noqa: BLE001  (one bad pair must not sink the batch)
                 return _failed(e)
 
@@ -73,7 +74,7 @@ def grade_pairs(judge: str, pairs: list[Pair], workers: int = 8) -> list[Grade]:
 
     def llm(p):
         try:
-            return llm_judge.grade(http, model, p[2], p[3])
+            return llm_judge.grade(http, model, p[2], p[3], rubric)
         except Exception as e:  # noqa: BLE001
             return _failed(e)
 
