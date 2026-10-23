@@ -1,0 +1,18 @@
+[project]
+name = "relevancy"
+version = "0.1.0"
+description = "Search relevance lab: turbopuffer retrieval, hosted rerankers, nDCG in DuckDB"
+authors = [
+    { name = "Rick Crawford" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=2.0.0",
+    "pyarrow>=26.0.0",
+    "python-dotenv>=1.2.4",
+    "turbopuffer==2.14.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.15,<0.10.0"]
+build-backend = "uv_build"
