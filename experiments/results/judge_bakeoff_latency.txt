@@ -1,0 +1,12 @@
+# Step 7 judge bake-off, per-judge summary lines from the final run's console output.
+# scripts/07_judge_bakeoff.py prints p50 latency but doesn't store it in the warehouse,
+# so these lines were copied from that run's output. Exact and kappa match
+# evidence.txt section 6, which recomputes them from the stored grades.
+# 200 held-out ESCI pairs, 50 per human grade. Latency is wall time per call from a laptop.
+jev:jev-1.14.0                               exact 0.55  kappa 0.41  p50 118 ms
+jev:jev-1.13.0                               exact 0.52  kappa 0.38  p50 110 ms
+jev-batched:jev-1.13.0                       exact 0.52  kappa 0.37  p50 111 ms
+google/gemma-3-27b-it                        exact 0.43  kappa 0.33  p50 501 ms
+meta-llama/llama-4-maverick                  exact 0.41  kappa 0.37  p50 435 ms
+openai/gpt-4o-mini                           exact 0.39  kappa 0.34  p50 656 ms
+meta-llama/llama-3.1-8b-instruct             exact 0.35  kappa 0.28  p50 500 ms

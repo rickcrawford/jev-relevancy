@@ -1,0 +1,12 @@
+# secrets
+.env
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# data and the local warehouse (rebuilt by the scripts)
+data/
+warehouse/*.duckdb
+warehouse/*.duckdb.wal

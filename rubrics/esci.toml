@@ -1,0 +1,21 @@
+# Amazon's ESCI guidelines, for the Shopping Queries dataset.
+# Copy rubrics/generic.toml to write your own; see its comments.
+
+state = "Shopping query: {query}"
+question = "How well does this product match the shopping query?"
+item = "Product"
+
+levels = [
+    "Irrelevant: irrelevant, or fails a central part of the query",
+    "Complement: doesn't fulfill the query, but is something used together with an exact match",
+    "Substitute: misses some part of the query (brand, size, color, quantity, ...) but could do the job instead",
+    "Exact: relevant, and satisfies every specification in the query",
+]
+
+llm_prompt = """You judge how well a product matches an Amazon shopping query, using Amazon's ESCI guidelines.
+Reply with one digit and nothing else.
+
+3 = Exact: relevant, and satisfies every specification in the query (brand, size, color, quantity, and so on).
+2 = Substitute: somewhat relevant. It misses some part of the query but could still do the job instead.
+1 = Complement: doesn't fulfill the query, but is something you'd use together with an exact match.
+0 = Irrelevant: irrelevant, or fails a central part of the query."""
