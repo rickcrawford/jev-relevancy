@@ -10,6 +10,7 @@ dependencies = [
     "duckdb>=2.0.0",
     "pyarrow>=26.0.0",
     "python-dotenv>=1.2.4",
+    "tpuf-arrow",
     "turbopuffer==2.14.0",
     "typesafe-sdk>=0.7.5",
 ]
@@ -23,3 +24,6 @@ dev = [
     "pyflakes>=4.0.3",
     "ruff>=0.17.2",
 ]
+
+[tool.uv.sources]
+tpuf-arrow = { git = "https://github.com/rickcrawford/tpuf-arrow", rev = "a24f48d2739ae49b98e5ece33b6914062f2432fa" }

@@ -239,7 +239,7 @@ def main() -> None:
 Next:
   uv run scripts/03_load_turbopuffer.py --dataset {ds} --scope full
   uv run scripts/04_search.py --dataset {ds} --scope full
-  uv run scripts/08_judge_runs.py --dataset {ds}
+  uv run scripts/08_judge_runs.py --dataset {ds} --judge jev-batched:jev-1.13.0
 (Step 6 adds rerankers, if you want to compare them.)""")
 
 

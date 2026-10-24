@@ -10,3 +10,4 @@ __pycache__/
 data/
 warehouse/*.duckdb
 warehouse/*.duckdb.wal
+warehouse/*.parquet

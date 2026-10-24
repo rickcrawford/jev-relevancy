@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from relevancy import jev, llm_judge
 from relevancy.judges import grade_pairs
 from relevancy.rubric import for_dataset
-from relevancy.tpuf import client, rerank
+from relevancy.tpuf import client, requests_by_query, rerank
 from relevancy.warehouse import connect, git_sha, sample_id
 
 
@@ -85,8 +85,9 @@ def main() -> None:
         raise SystemExit(f"{base_id} has no results to rerank.")
     config = json.loads(base_config) | {"base_run": base_id, "rerank_model": args.model}
     kind, _, name = args.model.partition(":") if ":" in args.model else ("tpuf", "", args.model)
+    run_id = f"{name.split('/')[-1]}-{uuid.uuid4().hex[:6]}"
     if kind == "tpuf":
-        ns = client().namespace(config["namespace"])
+        tp = client(max_concurrency=max(8, args.workers))
     elif kind == "jev":
         jev.client()  # fail fast if TYPESAFE_API_KEY is missing
         judge = f"jev-batched:{name}"  # all 50 candidates in one request per query
@@ -101,11 +102,14 @@ def main() -> None:
     def rerank_one(cand):
         query_id, text, ids, texts, *_ = cand
         if kind == "tpuf":
-            hits = rerank(ns, name, text, ids)
-            if len(hits.ids) != len(ids):
+            started = time.perf_counter()
+            hits = rerank(tp, config["namespace"], name, text, ids, run_id=run_id, query_id=query_id)
+            elapsed = (time.perf_counter() - started) * 1000
+            if hits.num_rows != len(ids):
                 # The filter only finds ids that are still in the namespace.
-                print(f"  warning: query {query_id}: reranker returned {len(hits.ids)} of {len(ids)} candidates")
-            return query_id, list(zip(hits.ids, hits.scores)), hits.latency_ms, hits.server_ms
+                print(f"  warning: query {query_id}: reranker returned {hits.num_rows} of {len(ids)} candidates")
+            # Server time comes from the request log once every query is done.
+            return query_id, list(zip(hits["id"].to_pylist(), hits["score"].to_pylist())), elapsed, None
 
         # Jev grades all candidates in one request; an LLM takes one call per
         # candidate, 10 at a time. A failed call comes back ungraded, not as a crash.
@@ -126,9 +130,11 @@ def main() -> None:
     with ThreadPoolExecutor(args.workers) as pool:
         reranked = list(pool.map(rerank_one, candidates))
 
-    run_id = f"{name.split('/')[-1]}-{uuid.uuid4().hex[:6]}"
+    logged = requests_by_query(tp, run_id) if kind == "tpuf" else {}
     rows, added = [], []
     for query_id, ranked, ms, server_ms in reranked:
+        if query_id in logged:  # a hosted reranker: use what tpuf-arrow logged, like step 4 does
+            ms, server_ms = logged[query_id]["wall_ms"], logged[query_id]["server_ms"]
         base_ms, base_server_ms = base_timing[query_id]
         added.append(ms)
         server = None if base_server_ms is None else base_server_ms + (server_ms or 0)
@@ -141,12 +147,15 @@ def main() -> None:
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     [run_id, args.dataset, retriever, args.model, json.dumps(config), git_sha()])
         con.executemany("INSERT INTO results VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+        if kind == "tpuf":
+            tp.save_log(con)
         con.commit()
 
     added.sort()
     print(f"{run_id}: reranked {len(candidates)} queries from {base_id}, "
           f"added p50 {added[len(added) // 2]:.0f} ms per query")
-    print("\nNext: uv run scripts/05_score.py")
+    flag = "" if args.dataset == "esci-us" else f" --dataset {args.dataset}"
+    print(f"\nNext: uv run scripts/05_score.py{flag}")
 
 
 if __name__ == "__main__":

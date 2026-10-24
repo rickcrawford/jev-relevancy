@@ -30,7 +30,13 @@ import duckdb
 from relevancy.judges import grade_pairs
 from relevancy.metrics import paired_delta, per_query
 from relevancy.rubric import load
-from relevancy.tpuf import ann_rank_by, bm25_rank_by, client
+from relevancy.tpuf import (
+    bm25_rank_by,
+    client,
+    hybrid_queries,
+    requests_by_query,
+    rerank,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "experiments" / "results"
@@ -53,10 +59,14 @@ def sampled(con):
                        [DS]).fetchall()
 
 
-def timed(call, **kwargs):
+def timed(call, *args, **kwargs):
     started = time.perf_counter()
-    resp = call(**kwargs)
-    return resp, (time.perf_counter() - started) * 1000
+    result = call(*args, **kwargs)
+    return result, (time.perf_counter() - started) * 1000
+
+
+def joined_ids(hits) -> str:
+    return " ".join(hits["id"].to_pylist())
 
 
 def write(name, rows, fields):
@@ -71,36 +81,37 @@ def write(name, rows, fields):
 def run_bm25():
     with warehouse() as con:
         queries = sampled(con)
-    ns, rows = client().namespace(NAMESPACE), []
+    tp, rows = client(), []
     for variant, rank_by in BM25.items():
+        run = []
         for qid, text in queries:
-            resp, wall = timed(ns.query, rank_by=rank_by(text), top_k=50)
-            rows.append({"variant": variant, "query_id": qid, "words": len(text.split()), "wall_ms": round(wall, 1),
-                         "server_ms": resp.performance.server_total_ms,
-                         "exec_ms": resp.performance.query_execution_ms,
-                         "ids": " ".join(str(r.id) for r in resp.rows or [])})
+            hits, wall = timed(tp.query, NAMESPACE, rank_by(text), top_k=50, run_id=f"bm25-{variant}", query_id=qid)
+            run.append({"variant": variant, "query_id": qid, "words": len(text.split()), "wall_ms": round(wall, 1),
+                        "ids": joined_ids(hits)})
+        logged = requests_by_query(tp, f"bm25-{variant}")
+        rows += [r | {"server_ms": logged[r["query_id"]]["server_ms"],
+                      "exec_ms": logged[r["query_id"]]["query_execution_ms"]} for r in run]
         print(f"  {variant} done")
-    write("bm25", rows, list(rows[0]))
+    write("bm25", rows, ["variant", "query_id", "words", "wall_ms", "server_ms", "exec_ms", "ids"])
 
 
 def run_onecall():
     with warehouse() as con:
         queries = sampled(con)
-    ns, rows = client().namespace(NAMESPACE), []
+    tp, rows = client(), []
     for k in (50, 100):
+        run = []
         for qid, text in queries:
-            resp, wall = timed(
-                ns.multi_query,
-                queries=[{"rank_by": ann_rank_by(text), "top_k": k, "include_attributes": ["text"]},
-                         {"rank_by": bm25_rank_by(text), "top_k": k, "include_attributes": ["text"]}],
+            (hits,), wall = timed(
+                tp.multi_query, NAMESPACE, hybrid_queries(text, k),
                 rerank_by={"model": "voyage/rerank-3", "attribute": "text", "query": text},
-                limit=50)
-            rows.append({"variant": f"onecall-{k}", "query_id": qid, "wall_ms": round(wall, 1),
-                         "server_ms": resp.performance.server_total_ms,
-                         "billable_bytes": resp.billing.billable_logical_bytes_queried,
-                         "ids": " ".join(str(r.id) for r in resp.results[0].rows or [])})
+                limit=50, run_id=f"onecall-{k}", query_id=qid)
+            run.append({"variant": f"onecall-{k}", "query_id": qid, "wall_ms": round(wall, 1), "ids": joined_ids(hits)})
+        logged = requests_by_query(tp, f"onecall-{k}")
+        rows += [r | {"server_ms": logged[r["query_id"]]["server_ms"],
+                      "billable_bytes": logged[r["query_id"]]["billable_bytes_queried"]} for r in run]
         print(f"  top_k {k} done")
-    write("onecall", rows, list(rows[0]))
+    write("onecall", rows, ["variant", "query_id", "wall_ms", "server_ms", "billable_bytes", "ids"])
 
 
 def run_filters():
@@ -113,19 +124,18 @@ def run_filters():
             WHERE q.dataset = ? AND q.sampled AND h.source = 'human' AND h.grade = 3
               AND length(d.brand) >= 3 AND contains(lower(q.text), lower(d.brand))
             GROUP BY ALL ORDER BY q.query_id""", [DS]).fetchall()
-    ns, rows = client().namespace(NAMESPACE), []
+    tp, rows = client(), []
     for qid, text, brand in branded:
         for variant, filters in (("unfiltered", None), ("brand filter", ("brand", "Eq", brand))):
             extra = {"filters": filters} if filters else {}
-            resp, wall = timed(
-                ns.multi_query,
-                queries=[{"rank_by": ann_rank_by(text), "top_k": 50, **extra},
-                         {"rank_by": bm25_rank_by(text), "top_k": 50, **extra}],
-                rerank_by=("RRF", {}), limit=50)
+            (hits,), wall = timed(tp.multi_query, NAMESPACE, hybrid_queries(text, 50, **extra),
+                                  rerank_by=("RRF", {}), limit=50, run_id=f"filters-{variant}", query_id=qid)
             rows.append({"variant": variant, "query_id": qid, "brand": brand, "wall_ms": round(wall, 1),
-                         "server_ms": resp.performance.server_total_ms,
-                         "ids": " ".join(str(r.id) for r in resp.results[0].rows or [])})
-    write("filters", rows, list(rows[0]))
+                         "ids": joined_ids(hits)})
+    logged = {v: requests_by_query(tp, f"filters-{v}") for v in ("unfiltered", "brand filter")}
+    for r in rows:
+        r["server_ms"] = logged[r["variant"]][r["query_id"]]["server_ms"]
+    write("filters", rows, ["variant", "query_id", "brand", "wall_ms", "server_ms", "ids"])
 
 
 def run_judged():
@@ -135,14 +145,11 @@ def run_judged():
             FROM queries q JOIN judgments h USING (dataset, query_id) JOIN docs d USING (dataset, doc_id)
             WHERE q.dataset = ? AND q.sampled AND h.source = 'human'
             GROUP BY ALL ORDER BY q.query_id""", [DS]).fetchall()
-    ns, rubric = client().namespace(NAMESPACE), load("esci")
+    tp, rubric = client(), load("esci")
 
     def voyage(c):
-        qid, text, ids, _ = c
-        resp = ns.query(rank_by=("id", "asc"), filters=("id", "In", ids), top_k=len(ids),
-                        include_attributes=["text"],
-                        rerank_by={"model": "voyage/rerank-3", "attribute": "text", "query": text})
-        return {"variant": "voyage", "query_id": qid, "ids": " ".join(str(r.id) for r in resp.rows or [])}
+        qid, text, doc_ids, _ = c
+        return {"variant": "voyage", "query_id": qid, "ids": joined_ids(rerank(tp, NAMESPACE, "voyage/rerank-3", text, doc_ids))}
 
     def jev(c):
         qid, text, ids, texts = c

@@ -1,6 +1,6 @@
-"""Recompute every number the README and the write-up cite.
+"""Recompute every number the README and docs/ cite.
 
-The README quotes figures from the warehouse and from the experiments in
+The docs quote figures from the warehouse and from the experiments in
 this folder. This script derives each of them again from the data, in
 numbered sections, so a claim like "Jev's gain shrinks on condensed nDCG"
 can be checked against section 1 rather than taken on trust.
@@ -409,7 +409,7 @@ if judge_path.exists():
     print(f"  1.13.0 and 1.14.0 give the same grade on {mean(a == b for _, _, a, b in rows):.1%} of those pairs")
 
 # 16 -----------------------------------------------------------------
-section("16. Worked examples quoted in the README's warehouse recipes")
+section("16. Worked examples quoted in the warehouse recipes")
 first = con.execute("SELECT query_id, text FROM queries WHERE dataset = ? AND sampled ORDER BY query_id LIMIT 1",
                     [DS]).fetchone()
 graded, jev_exact = con.execute("""

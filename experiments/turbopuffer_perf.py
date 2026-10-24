@@ -23,7 +23,7 @@ from pathlib import Path
 
 import duckdb
 
-from relevancy.tpuf import client, search
+from relevancy.tpuf import client, requests_by_query, search
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "experiments" / "results"
@@ -34,57 +34,41 @@ FIELDS = ["pass", "retriever", "query_id", "wall_ms", "server_total_ms", "query_
           "exhaustive_search_count", "billable_bytes", "top50"]
 
 
-def perf_row(resp, wall_ms: float) -> dict:
-    p, b = resp.performance, resp.billing
-    return {
-        "wall_ms": round(wall_ms, 1),
-        "server_total_ms": p.server_total_ms,
-        "query_execution_ms": p.query_execution_ms,
-        "embedding_ms": getattr(p, "embedding_ms", None),
-        "embedding_tokens": getattr(p, "embedding_tokens", None),
-        "cache_temperature": p.cache_temperature,
-        "cache_hit_ratio": p.cache_hit_ratio,
-        "exhaustive_search_count": p.exhaustive_search_count,
-        "billable_bytes": getattr(b, "billable_logical_bytes_queried", None),
-    }
-
-
 def run() -> None:
     con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
     queries = con.execute("SELECT query_id, text FROM queries WHERE dataset = 'esci-us' AND sampled "
                           "ORDER BY query_id").fetchall()
     con.close()
-    ns = client().namespace(NAMESPACE)
+    tp = client()
 
-    # search() returns Hits without the raw response, so wrap the namespace to keep it.
-    last = {}
-
-    class Recording:
-        def query(self, **kw):
-            last["resp"] = ns.query(**kw)
-            return last["resp"]
-
-        def multi_query(self, **kw):
-            last["resp"] = ns.multi_query(**kw)
-            return last["resp"]
-
-    rec = Recording()
     OUT.mkdir(parents=True, exist_ok=True)
     with open(OUT / "turbopuffer_perf.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         for pass_ in (1, 2):
             for retriever in RETRIEVERS:
+                run_id, top50, wall = f"perf-{pass_}-{retriever}", {}, {}
                 for qid, text in queries:
                     started = time.perf_counter()
-                    hits = search(rec, retriever, text)
-                    row = perf_row(last["resp"], (time.perf_counter() - started) * 1000)
+                    hits = search(tp, NAMESPACE, retriever, text, run_id=run_id, query_id=qid)
+                    wall[qid] = (time.perf_counter() - started) * 1000
+                    top50[qid] = " ".join(hits["id"].to_pylist())
+                # Everything else turbopuffer reported is in tpuf-arrow's request log.
+                for qid, r in requests_by_query(tp, run_id).items():
                     w.writerow({"pass": pass_, "retriever": retriever, "query_id": qid,
-                                "top50": " ".join(hits.ids), **row})
+                                "wall_ms": round(wall[qid], 1), "server_total_ms": r["server_ms"],
+                                "query_execution_ms": r["query_execution_ms"], "embedding_ms": r["embedding_ms"],
+                                "embedding_tokens": r["embedding_tokens"],
+                                "cache_temperature": r["cache_temperature"],
+                                "cache_hit_ratio": r["cache_hit_ratio"],
+                                "exhaustive_search_count": r["exhaustive_search_count"],
+                                "billable_bytes": r["billable_bytes_queried"], "top50": top50[qid]})
                 print(f"pass {pass_} {retriever}: done")
 
     # Recall of ANN against exhaustive search. The endpoint picks query
     # vectors from the namespace itself; it doesn't accept a text query.
+    # tpuf-arrow doesn't wrap it, so this uses the SDK client it holds.
+    ns = tp.tpuf.namespace(NAMESPACE)
     started = time.perf_counter()
     r = ns.recall(top_k=50, num=100)
     recall = {"top_k": 50, "num": 100, "avg_recall": r.avg_recall, "avg_ann_count": r.avg_ann_count,

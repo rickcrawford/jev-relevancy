@@ -2,7 +2,7 @@
 
 Each script here tests one thing the main walkthrough raised. They read the
 warehouse read-only and write their results to `experiments/results/`, so
-they never change a run or a judgment the README reports.
+they never change a run or a judgment the docs report.
 
 | Script | What it tests | Result |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ they never change a run or a judgment the README reports.
 | `turbopuffer_perf.py` | Where turbopuffer's server time goes, cache temperature, result stability, and ANN recall | Of ANN's 76 ms median server time, 66 ms is embedding the query text. BM25 and hybrid run about 103 ms at p50 and 320 ms at p99. Every query reported a hot cache, and repeating the 500 queries gave the same top 10 for 100% of BM25 queries and 99.4% of ANN and hybrid queries. ANN recall against exhaustive search is 0.994 at 50 and 0.995 at 10 (100 vectors sampled from the namespace). 9,785 documents (2%) were still unindexed and scanned exhaustively on every query. |
 | `retrieval_followups.py` | BM25 field variants, hybrid and reranking in one request, a brand filter, and Elastic's judged-only setup | Title-only BM25: 17 ms p50, 43 ms p99, nDCG@10 +0.020. One request with `rerank_by` on `multi_query`: 362 to 308 ms wall, +0.006 nDCG@10 (+0.016 with 100 per subquery). Brand filter on 81 queries: 79 to 77 ms, +0.047 (an upper bound). Judged products only: Jev 0.868, Voyage 0.848, product-id order 0.679. Output in `results/retrieval_followups.txt`. |
 | `07_judge_bakeoff.py` (main scripts) | Judge latency | The script prints p50 latency but doesn't store it. The final run's lines are saved in `results/judge_bakeoff_latency.txt`: Jev 110 to 118 ms, the LLMs 435 to 656 ms. |
-| `evidence.py` | The numbers the README cites | Recomputes all of them; output in `results/evidence.txt`. |
+| `evidence.py` | The numbers the docs cite | Recomputes all of them; output in `results/evidence.txt`. |
 
 The Jev 1.14.0 follow-up ran the main scripts against a copy of the
 warehouse, so the main runs stay as they were:
