@@ -318,6 +318,213 @@ Copy it to `rubrics/<yours>.toml` and make the levels specific. For a support kn
 
 After editing a rubric, regrade with `uv run scripts/08_judge_runs.py --dataset mydocs --regrade`.
 
+## Querying the warehouse
+
+Every number in this README came out of `warehouse/relevancy.duckdb`, and it answers plenty of questions the scripts don't ask. DuckDB needs nothing beyond `uv sync`: it's a Python library, so there's no server to run and no extension to install.
+
+### Open it
+
+From Python, with nothing else installed:
+
+```bash
+uv run python -c "import duckdb; duckdb.connect('warehouse/relevancy.duckdb', read_only=True).sql('SELECT retriever, reranker, count(*) FROM runs GROUP BY ALL').show()"
+```
+
+For poking around, the DuckDB command-line shell is nicer. Install it (`brew install duckdb` on a Mac, or a download from [duckdb.org](https://duckdb.org/docs/installation/)) and open the file read-only:
+
+```bash
+duckdb -readonly warehouse/relevancy.duckdb
+```
+
+In Python, `.show()` prints a table, `.fetchall()` returns tuples, and `.arrow()` returns a pyarrow table. `.df()` needs pandas, which this repo doesn't install (`uv add pandas` if you want it).
+
+### Things to know before you query
+
+- **One process writes at a time.** DuckDB locks the file while a process has it open for writing, and a second process gets an error instead of waiting, even a read-only one. The scripts work around it: they read what they need, close the connection, do the slow network work, and reopen to write. If a script is mid-write when you open the file, wait a second and retry, or copy the file and query the copy.
+- **`RELEVANCY_DB` points every script at another file.** `RELEVANCY_DB=/tmp/scratch.duckdb uv run scripts/02_prepare_custom.py ...` builds a separate warehouse. That's how I tested the custom-data path without touching the real one, and it's the way to run two experiments at once.
+- **The schema is applied on every connect.** `warehouse/schema.sql` uses `CREATE TABLE IF NOT EXISTS` and `ADD COLUMN IF NOT EXISTS`, so to add a column, add it there and the next script run picks it up.
+- **Per-query fields repeat on every result row.** `latency_ms`, `server_ms`, and `billable_bytes` belong to the query, but they sit on each of its 50 rows. Summing them over `results` overcounts 50 times; take `DISTINCT run_id, query_id` first, as the latency query below does. Reranked runs leave `billable_bytes` empty.
+- **`metrics` holds averages, not per-query scores.** Step 5 recomputes per-query nDCG with `relevancy.metrics.per_query()` and stores only the run-level numbers. For query-by-query work, call that function (the head-to-head recipe below shows how). It works on a read-only connection.
+- **Runs are tied to a query sample.** Each run's `config` stores a fingerprint of the sample it searched (`config->>'sample'`). Rerunning step 2 with a new sample size changes the fingerprint, and scoring skips the old runs. The sample is drawn with DuckDB's `hash()`, which can change between major DuckDB versions, so an upgrade can change it too.
+
+### The tables
+
+| Table | Key | Columns worth knowing |
+| --- | --- | --- |
+| `datasets` | `dataset` | `rubric`, the file in `rubrics/` its judges use |
+| `queries` | `dataset, query_id` | `text`, `slice` (like `short\|brand`), `sampled` |
+| `docs` | `dataset, doc_id` | `title`, `body`, `brand`, `color` |
+| `judgments` | `dataset, query_id, doc_id, source` | `grade` (0 to 3), `prob` and `expected` from judges that return probabilities |
+| `runs` | `run_id` | `retriever`, `reranker`, `config` (JSON: namespace, region, sample, base run), `git_sha`, `started_at` |
+| `results` | `run_id, query_id, rank` | `doc_id`, `score`, `latency_ms`, `server_ms`, `billable_bytes` |
+| `metrics` | `run_id, judge, metric, slice` | `value`, `ci_low`, `ci_high` |
+
+`judgments.source` is `human`, a judge name like `jev-batched:jev-1.13.0`, or a bake-off grade like `jev:jev-1.13.0@bakeoff`. After the 500-query run the file is 784 MB: 482,105 docs, 8,956 queries, about 214,000 judgments, and about 254,000 result rows.
+
+### Recipes
+
+Each of these runs as is against a warehouse built by the walkthrough. Swap in your own run ids from the first one.
+
+**Runs on the current sample.** The fingerprint is the same expression `warehouse.sample_id()` uses.
+
+```sql
+SELECT run_id, retriever, reranker, config->>'namespace' AS namespace, git_sha, started_at
+FROM runs
+WHERE dataset = 'esci-us'
+  AND config->>'sample' = (SELECT count(*) || '-' || (hash(string_agg(query_id, ',' ORDER BY query_id)) % 1000000)
+                           FROM queries WHERE dataset = 'esci-us' AND sampled)
+ORDER BY started_at;
+```
+
+**Every run under every judge, side by side.**
+
+```sql
+PIVOT (
+  SELECT r.retriever || ' / ' || r.reranker AS run, m.judge, round(m.value, 3) AS ndcg10
+  FROM metrics m JOIN runs r USING (run_id)
+  WHERE m.metric = 'ndcg10' AND m.slice = 'all' AND r.config->>'namespace' = 'esci-us-full'
+) ON judge USING first(ndcg10) ORDER BY run;
+```
+
+**One query's top 10, with what the humans and Jev said.** This is the query I run most. Reading ten real results next to their grades tells you more than any average.
+
+```sql
+SELECT r.rank, left(d.title, 60) AS title, h.grade AS human, j.grade AS jev, round(j.expected, 2) AS jev_expected
+FROM results r
+JOIN docs d ON d.dataset = 'esci-us' AND d.doc_id = r.doc_id
+LEFT JOIN judgments h ON h.dataset = 'esci-us' AND h.query_id = r.query_id
+                     AND h.doc_id = r.doc_id AND h.source = 'human'
+LEFT JOIN judgments j ON j.dataset = 'esci-us' AND j.query_id = r.query_id
+                     AND j.doc_id = r.doc_id AND j.source = 'jev-batched:jev-1.13.0'
+WHERE r.run_id = 'hybrid-rrf-full-4cea30'        -- your run id
+  AND r.query_id = (SELECT query_id FROM queries WHERE dataset = 'esci-us' AND sampled ORDER BY query_id LIMIT 1)
+  AND r.rank <= 10
+ORDER BY r.rank;
+```
+
+On my first sampled query, a search for women's T-shirt dresses, the humans had graded 2 of the top 10. Jev graded all 10 and called 6 of them Exact.
+
+**Where Jev and the humans disagree hardest.**
+
+```sql
+SELECT q.text AS query, left(d.title, 50) AS title, h.grade AS human, j.grade AS jev, round(j.prob, 2) AS jev_prob
+FROM judgments h
+JOIN judgments j USING (dataset, query_id, doc_id)
+JOIN queries q USING (dataset, query_id)
+JOIN docs d USING (dataset, doc_id)
+WHERE h.dataset = 'esci-us' AND h.source = 'human' AND j.source = 'jev-batched:jev-1.13.0'
+  AND abs(h.grade - j.grade) = 3
+ORDER BY j.prob DESC
+LIMIT 20;
+```
+
+This one found something I hadn't looked for. The top of the list was "boys swim trunks without mesh lining", "face masks without nose wire", "hand sanitizer without alcohol", and "1 12 off-road vehicle not rc": products the humans called Exact and Jev called Irrelevant with near-certainty. Splitting the pairs on a negation word in the query makes it a number:
+
+```sql
+SELECT regexp_matches(lower(q.text), '\b(without|not|no|non)\b') AS negation,
+       count(*) AS pairs,
+       round(avg((h.grade = 3 AND j.grade = 0)::INT), 3) AS exact_called_irrelevant,
+       round(avg((h.grade = j.grade)::INT), 3) AS exact_agreement
+FROM judgments h
+JOIN judgments j USING (dataset, query_id, doc_id)
+JOIN queries q USING (dataset, query_id)
+WHERE h.dataset = 'esci-us' AND h.source = 'human' AND j.source = 'jev-batched:jev-1.13.0'
+GROUP BY ALL;
+```
+
+On the 278 labeled pairs from negation queries, Jev called an Exact product Irrelevant 17.3% of the time, against 3.7% on the other 3,629. I haven't checked how many of those are Jev missing the negation and how many are products that really do have the mesh lining. Either way, it's a rubric line worth adding ("a product that has what the query excludes is Irrelevant") and the kind of slice I'd watch on my own data.
+
+**How Jev's grades line up with the humans' (a confusion matrix).**
+
+```sql
+PIVOT (
+  SELECT h.grade AS human, j.grade AS jev
+  FROM judgments h JOIN judgments j USING (dataset, query_id, doc_id)
+  WHERE h.dataset = 'esci-us' AND h.source = 'human' AND j.source = 'jev-batched:jev-1.13.0'
+) ON jev USING count(*) ORDER BY human;
+```
+
+Rows are the human grade and columns are Jev's. On these pooled pairs, Jev's most common miss is grading a human Substitute (2) as Irrelevant (0): 216 of 1,075.
+
+**How much of each run's top 10 has no human label.** This is the number behind the Jev and Voyage tie.
+
+```sql
+SELECT ru.retriever || ' / ' || ru.reranker AS run,
+       round(avg((h.doc_id IS NULL)::INT), 3) AS unlabeled_share_top10
+FROM results r
+JOIN runs ru USING (run_id)
+LEFT JOIN judgments h ON h.dataset = ru.dataset AND h.source = 'human'
+                     AND h.query_id = r.query_id AND h.doc_id = r.doc_id
+WHERE ru.config->>'namespace' = 'esci-us-full' AND r.rank <= 10
+GROUP BY ALL ORDER BY 2;
+```
+
+**Latency and query cost per run.** Note the `DISTINCT`, which collapses the 50 repeated rows per query.
+
+```sql
+WITH per_query AS (
+  SELECT DISTINCT run_id, query_id, latency_ms, server_ms, billable_bytes FROM results
+)
+SELECT ru.retriever || ' / ' || ru.reranker AS run,
+       count(*) AS queries,
+       round(quantile_cont(latency_ms, 0.5)) AS p50_ms,
+       round(quantile_cont(latency_ms, 0.99)) AS p99_ms,
+       round(sum(billable_bytes) / 1e12, 2) AS tb_queried,
+       round(sum(billable_bytes) / 1e15, 4) AS usd_at_1_per_pb
+FROM per_query JOIN runs ru USING (run_id)
+WHERE ru.config->>'namespace' = 'esci-us-full'
+GROUP BY ALL ORDER BY p50_ms;
+```
+
+Each first-stage run queried 0.85 TB across 500 queries, which is $0.0009 at list price.
+
+**One run by query slice.** Intervals are stored for `all` only.
+
+```sql
+SELECT slice, round(value, 3) AS ndcg10
+FROM metrics
+WHERE run_id = 'jev-1.13.0-b53bce' AND judge = 'human' AND metric = 'ndcg10'
+ORDER BY value;
+```
+
+**Head to head, query by query (Python).** Per-query scores come from `per_query()`, and DuckDB can join a pyarrow table by its variable name:
+
+```python
+import duckdb
+import pyarrow as pa
+from relevancy.metrics import per_query
+
+con = duckdb.connect("warehouse/relevancy.duckdb", read_only=True)
+a, b = "jev-1.13.0-b53bce", "rerank-3-977611"   # your run ids
+pq = per_query(con, "esci-us", [a, b], judge="human")
+diffs = pa.Table.from_pylist([
+    {"query_id": q, "a": m["ndcg10"], "b": pq[(b, q)]["ndcg10"]}
+    for (run, q), m in pq.items() if run == a and m["ndcg10"] is not None
+])
+con.sql("""
+    SELECT q.text, round(a, 3) AS a, round(b, 3) AS b, round(a - b, 3) AS diff
+    FROM diffs JOIN queries q ON q.dataset = 'esci-us' AND q.query_id = diffs.query_id
+    ORDER BY abs(a - b) DESC LIMIT 10
+""").show()
+```
+
+Save it as a file and run it with `uv run python yourfile.py`. For Jev against Voyage, Jev did better on 198 queries, Voyage on 202, and 100 tied. The average gap of 0.011 is a few big swings in each direction, like "rose gold series 3 apple watch", where Jev scored 0.728 and Voyage 0.
+
+**Export.** One table, or the whole warehouse as Parquet:
+
+```sql
+COPY (SELECT * FROM judgments WHERE source <> 'human') TO 'judge_grades.parquet' (FORMAT parquet);
+EXPORT DATABASE 'warehouse_export' (FORMAT parquet);
+```
+
+`EXPORT DATABASE` writes one Parquet file per table plus `schema.sql` and `load.sql`, and `IMPORT DATABASE 'warehouse_export'` rebuilds it. That's the easy way to share results or archive a run.
+
+### Back up and reset
+
+To back up, copy the file while nothing is writing to it, or use `EXPORT DATABASE`.
+
+To start over, delete `warehouse/relevancy.duckdb` and rerun step 2. Everything else rebuilds from the scripts, except the judge grades: those cost money and time, so export `judgments` first if you might want them back.
+
 ## What it costs
 
 List prices, from turbopuffer's [pricing page](https://turbopuffer.com/pricing) and each provider's, for everything in part 1 at 500 queries:
