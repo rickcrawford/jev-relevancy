@@ -1,14 +1,22 @@
-"""turbopuffer client, namespace schema, and the retrieval configs we compare."""
+"""turbopuffer client, namespace schema, and the retrieval configs we compare.
+
+Every request goes through tpuf-arrow (https://github.com/rickcrawford/tpuf-arrow),
+which returns hits as Arrow tables and logs each request with its server time
+and billed bytes. Scripts tag requests with a run_id and query_id, then read
+those numbers back from the log, or save it to the warehouse's tpuf_requests
+table.
+"""
 
 import os
-import time
-from dataclasses import dataclass
 
+import pyarrow as pa
+import pyarrow.compute as pc
+import tpuf_arrow as ta
 from dotenv import load_dotenv
-from turbopuffer import Turbopuffer
 
 from relevancy.warehouse import ROOT
 
+# The judges read their keys from the environment, so load all of .env.
 load_dotenv(ROOT / ".env")
 
 # gcp-us-central1 is the default in a lot of turbopuffer examples, but the docs
@@ -22,10 +30,11 @@ EMBED_MODEL = os.environ.get("EMBED_MODEL", "voyage/voyage-4-lite")
 TOP_K = 50  # candidates per query; every reranker sees the same 50
 
 
-def client() -> Turbopuffer:
-    if not os.environ.get("TURBOPUFFER_API_KEY"):
-        raise SystemExit("TURBOPUFFER_API_KEY is not set. Copy .env.example to .env and add your key.")
-    return Turbopuffer(region=REGION)
+def client(max_concurrency: int = 8) -> ta.Client:
+    try:
+        return ta.connect(region=REGION, max_concurrency=max_concurrency)
+    except ta.ConfigError:
+        raise SystemExit("TURBOPUFFER_API_KEY is not set. Copy .env.example to .env and add your key.") from None
 
 
 def namespace_name(dataset: str, scope: str) -> str:
@@ -56,65 +65,51 @@ def ann_rank_by(q: str) -> tuple:
     return ("text", "ANN", ("Embed", q))
 
 
-@dataclass
-class Hits:
-    ids: list[str]
-    scores: list[float]
-    latency_ms: float        # wall clock, as the caller sees it
-    server_ms: float | None
-    billable_bytes: int | None
+RANK_BY = {
+    "bm25": bm25_rank_by,
+    # Deliberately weak: titles only. Project 2 needs a spread of quality
+    # to test whether a judge ranks systems the way humans do.
+    "bm25-title": lambda q: ("title", "BM25", q),
+    "ann": ann_rank_by,
+}
 
 
-def _hits(resp, rows, started: float) -> Hits:
-    perf, bill = resp.performance, resp.billing
-    return Hits(
-        ids=[str(r.id) for r in rows],
-        scores=[float(getattr(r, "$dist")) for r in rows],
-        latency_ms=(time.perf_counter() - started) * 1000,
-        server_ms=getattr(perf, "server_total_ms", None),
-        billable_bytes=getattr(bill, "billable_logical_bytes_queried", None),
-    )
+def hybrid_queries(q: str, k: int = TOP_K, **extra) -> list[dict]:
+    """The two subqueries hybrid-rrf fuses: vector search, then BM25."""
+    return [{"rank_by": ann_rank_by(q), "top_k": k, **extra}, {"rank_by": bm25_rank_by(q), "top_k": k, **extra}]
 
 
-def search(ns, retriever: str, q: str, k: int = TOP_K) -> Hits:
-    """Run one first-stage retriever: bm25, bm25-title, ann, or hybrid-rrf."""
-    started = time.perf_counter()
-    if retriever == "bm25":
-        resp = ns.query(rank_by=bm25_rank_by(q), top_k=k)
-        return _hits(resp, resp.rows or [], started)
-    if retriever == "bm25-title":
-        # Deliberately weak: titles only. Project 2 needs a spread of quality
-        # to test whether a judge ranks systems the way humans do.
-        resp = ns.query(rank_by=("title", "BM25", q), top_k=k)
-        return _hits(resp, resp.rows or [], started)
-    if retriever == "ann":
-        resp = ns.query(rank_by=ann_rank_by(q), top_k=k)
-        return _hits(resp, resp.rows or [], started)
+def search(tp: ta.Client, namespace: str, retriever: str, q: str, k: int = TOP_K,
+           *, run_id: str | None = None, query_id: str | None = None) -> pa.Table:
+    """Run one first-stage retriever (bm25, bm25-title, ann, or hybrid-rrf) and return id, rank, score."""
+    tags = {"run_id": run_id, "query_id": query_id}
     if retriever == "hybrid-rrf":
         # Both subqueries run on one snapshot and turbopuffer fuses them with
         # reciprocal rank fusion (k=60) on the server.
-        resp = ns.multi_query(
-            queries=[{"rank_by": ann_rank_by(q), "top_k": k},
-                     {"rank_by": bm25_rank_by(q), "top_k": k}],
-            rerank_by=("RRF", {}),
-            limit=k,
-        )
-        return _hits(resp, resp.results[0].rows or [], started)
-    raise ValueError(f"unknown retriever {retriever!r}")
+        (hits,) = tp.multi_query(namespace, hybrid_queries(q, k), rerank_by=("RRF", {}), limit=k, **tags)
+        return hits
+    if retriever not in RANK_BY:
+        raise ValueError(f"unknown retriever {retriever!r}")
+    return tp.query(namespace, RANK_BY[retriever](q), top_k=k, **tags)
 
 
-def rerank(ns, model: str, q: str, ids: list[str]) -> Hits:
+def rerank(tp: ta.Client, namespace: str, model: str, q: str, ids: list[str],
+           *, run_id: str | None = None, query_id: str | None = None) -> pa.Table:
     """Rerank a fixed candidate set with one of turbopuffer's hosted models.
 
     Filtering on the candidate ids guarantees every reranker sees exactly the
     same documents, whatever produced them.
     """
-    started = time.perf_counter()
-    resp = ns.query(
-        rank_by=("id", "asc"),
-        filters=("id", "In", ids),
-        top_k=len(ids),
-        include_attributes=["text"],
-        rerank_by={"model": model, "attribute": "text", "query": q},
-    )
-    return _hits(resp, resp.rows or [], started)
+    return tp.query(namespace, ("id", "asc"), top_k=len(ids), filters=("id", "In", ids),
+                    rerank_by={"model": model, "attribute": "text", "query": q},
+                    run_id=run_id, query_id=query_id)
+
+
+def requests_by_query(tp: ta.Client, run_id: str) -> dict[str, dict]:
+    """One run's rows from the client's request log, by query_id.
+
+    Each row has wall_ms, server_ms, billable_bytes_queried, cache details, and
+    the rest of tpuf-arrow's log columns.
+    """
+    log = tp.log
+    return {r["query_id"]: r for r in log.filter(pc.equal(log["run_id"], run_id)).to_pylist()}

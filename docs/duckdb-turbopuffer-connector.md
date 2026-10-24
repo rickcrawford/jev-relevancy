@@ -1,5 +1,7 @@
 # A DuckDB connector for turbopuffer
 
+Stage 1 of this plan is built: [tpuf-arrow](https://github.com/rickcrawford/tpuf-arrow), which this repo uses for its turbopuffer requests. This doc is the design as written beforehand, so parts of it describe the repo as it was then.
+
 I propose turning this repo's warehouse into a reusable connector in three stages: Arrow-returning Python helpers first, a shared eval schema alongside them, and a native DuckDB extension only if the first two get real use. turbopuffer is good at retrieval over data that lives on object storage. DuckDB is good at everything you do with the results afterward, and nothing today connects the two except a hand-written loop.
 
 Status as of 2026-10-23. Every turbopuffer and DuckDB claim below comes from a page I fetched (see Sources). Anything I could not confirm is marked "Open" and collected at the end.

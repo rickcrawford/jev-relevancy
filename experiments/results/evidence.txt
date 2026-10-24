@@ -156,7 +156,7 @@ long|brand             11   2.2%   0.502             jev 0.615
   as a judge on the same 3,692 labeled pool pairs: exact 0.631 against 0.599, paired +0.031 [+0.019, +0.045] (resampling queries); 1.14.0 kappa 0.471
   1.13.0 and 1.14.0 give the same grade on 87.8% of those pairs
 
-## 16. Worked examples quoted in the README's warehouse recipes
+## 16. Worked examples quoted in the warehouse recipes
 
   first sampled query "t shirt dresses for women sexy": hybrid top 10 has 2 human labels; Jev called 6 Exact
   big Jev/Voyage swing: "rose gold series 3 apple watch" Jev 0.728, Voyage 0.000
