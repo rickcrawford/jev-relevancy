@@ -181,12 +181,14 @@ def main() -> None:
     for judge in judges:
         fair = [(rid, rr) for rid, _, rr in runs if not grades_own_homework(judge, rr)]
         ids = [rid for rid, _ in fair]
-        (n, exact, h, g) = con.execute("""
+        (n, exact, h, g) = con.execute(f"""
             SELECT count(*), avg((h.grade = j.grade)::INT), list(h.grade), list(j.grade)
             FROM judgments h JOIN judgments j USING (dataset, query_id, doc_id)
-            JOIN queries q USING (dataset, query_id)
-            WHERE h.dataset = ? AND h.source = 'human' AND j.source = ? AND q.sampled
-        """, [args.dataset, judge]).fetchall()[0]
+            WHERE h.dataset = ? AND h.source = 'human' AND j.source = ?
+              -- only pairs in this pool, so every judge is compared on the same pairs
+              AND (h.query_id, h.doc_id) IN (SELECT query_id, doc_id FROM results
+                                             WHERE run_id IN (SELECT unnest(?)) AND rank <= {DEPTH})
+        """, [args.dataset, judge, run_ids]).fetchall()[0]
         summary.append({
             "judge": judge,
             "runs ranked": len(ids),

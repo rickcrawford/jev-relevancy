@@ -1,0 +1,24 @@
+
+## BM25 variants: server time by query length, and quality
+variant        nDCG@10                 vs main  server p50   p99  median server ms by words 1/2/3/4/5/6+
+title2x+body     0.311 +0.000 [+0.000, +0.000]         102   322  31/50/79/136/216/282
+title+body       0.292 -0.019 [-0.028, -0.012]         100   308  28/49/78/134/211/277
+body             0.223 -0.089 [-0.107, -0.072]          98   287  29/47/76/130/211/260
+title            0.332 +0.020 [+0.008, +0.033]          17    43  13/14/16/19/20/29
+
+## Hybrid + Voyage in one request, against the two-request pipeline
+  two requests (stored runs): nDCG@10 0.463, wall p50 362 ms, server p50 248 ms (both requests)
+  onecall-50: nDCG@10 0.469, vs two requests +0.006 [+0.003, +0.010], wall p50 308 ms, server p50 245 ms, 3.42 GB billed per query
+  onecall-100: nDCG@10 0.478, vs two requests +0.016 [+0.010, +0.022], wall p50 323 ms, server p50 262 ms, 3.42 GB billed per query
+
+## Brand filter on branded queries (brand from the human-Exact products: an upper bound)
+  unfiltered: nDCG@10 0.477, server p50 79 ms, 0 queries returned nothing
+  brand filter: nDCG@10 0.524, server p50 77 ms, 0 queries returned nothing
+  filter minus unfiltered: +0.047 [+0.001, +0.096], n=81
+
+## Reranking only the judged products (KDD Cup Task 1 style)
+  voyage    nDCG@10 0.848 (exp gain), 0.801 (KDD gain E=1, S=0.1, C=0.01), n=500
+  jev       nDCG@10 0.868 (exp gain), 0.817 (KDD gain E=1, S=0.1, C=0.01), n=500
+  id order  nDCG@10 0.679 (exp gain), 0.569 (KDD gain E=1, S=0.1, C=0.01), n=500
+  jev minus voyage, exp gain: +0.020 [+0.010, +0.029]
+  jev minus voyage, KDD gain: +0.016 [+0.003, +0.029]

@@ -1,0 +1,17 @@
+retriever   pass  wall p50    p99  server p50    p99  embed p50  exec p50   hot  unindexed
+bm25           1       157    392         102    321          0       102  100%       9785
+bm25           2       158    380         103    327          0       103  100%       9785
+ann            1       131    213          76     93         66        76  100%       9785
+ann            2       129    181          76     90         66        76  100%       9785
+hybrid-rrf     1       158    379         103    315         66       103  100%       9785
+hybrid-rrf     2       164    402         104    328         66       104  100%       9785
+top 10 identical between passes: bm25 100.0%, ann 99.4%, hybrid-rrf 99.4%
+recall: {
+  "top_k": 50,
+  "num": 100,
+  "avg_recall": 0.9940001964569092,
+  "avg_ann_count": 50.0,
+  "avg_exhaustive_count": 50.0,
+  "seconds": 36.1,
+  "top10_avg_recall": 0.9950000643730164
+}

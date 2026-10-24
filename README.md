@@ -11,7 +11,7 @@ A cheap judge is only useful if you know how far to trust it, so this walkthroug
 
 turbopuffer does the retrieval (BM25, vector, and hybrid, plus hosted rerankers), and DuckDB keeps every run, result, grade, and latency in one file and computes the metrics in SQL.
 
-On 500 ESCI queries over all 482k products, Jev reranked turbopuffer's hybrid results within noise of the best hosted reranker I tried (Voyage's rerank-3). As a judge, it had the highest exact agreement with the human graders of anything I tested, at a quarter to a sixth of the LLMs' latency. Asked to rank eight search setups, it put 26 of the 28 pairs in the same order as the human labels (on standard nDCG@10). One of the two it flipped was a real difference. The numbers are [below](#what-the-500-query-run-showed).
+On 500 ESCI queries over all 482k products, Jev reranked turbopuffer's hybrid results about as well as the best hosted reranker I tried (Voyage's rerank-3): 0.011 behind on standard nDCG@10, with a 95% interval that just reaches zero, and 0.003 ahead on condensed nDCG. As a judge, it had the highest exact agreement with the human graders of the seven I tested, 8 points ahead of the best LLM, at a quarter to a sixth of the LLMs' latency. Asked to rank eight search setups, it put 26 of the 28 pairs in the same order as the human labels (on standard nDCG@10). One of the two it flipped was a real difference. The numbers are [below](#what-the-500-query-run-showed), and [`experiments/evidence.py`](experiments/evidence.py) recomputes every one of them from the warehouse ([how much to trust them](#how-much-to-trust-these-numbers)).
 
 ## How the pieces fit
 
@@ -60,7 +60,7 @@ uv sync
 | `TURBOPUFFER_API_KEY` | everything | |
 | `TYPESAFE_API_KEY` | Jev, in steps 6 to 8 | |
 | `OPENROUTER_API_KEY` | LLM judges and rerankers | optional |
-| `TURBOPUFFER_REGION` | | defaults to `aws-us-east-1`. Pick the region closest to you. Skip `gcp-us-central1`; turbopuffer's docs say it's compute-constrained and ask new workloads to go elsewhere. |
+| `TURBOPUFFER_REGION` | | defaults to `aws-us-east-1`. Pick the region closest to you. Skip `gcp-us-central1`; turbopuffer's [regions page](https://turbopuffer.com/docs/regions) says it's compute-constrained and asks new workloads to go elsewhere. |
 | `EMBED_MODEL` | | defaults to `voyage/voyage-4-lite`. Any model on turbopuffer's [embedding page](https://turbopuffer.com/docs/embedding). Change it and you need to reload the namespace. |
 | `JEV_MODEL` | | defaults to `jev-1.13.0`, the version turbopuffer hosts and Elastic tested. TypeSafe's API serves newer ones too. |
 
@@ -85,7 +85,7 @@ rerankers
   ok    zeroentropy/zerank-2
 ```
 
-The Jev line is expected. turbopuffer hosts Jev but doesn't turn it on by default, so this walkthrough calls Jev through TypeSafe's API instead (see [Jev](#jev)).
+The Jev line is expected. turbopuffer lists `typesafe/jev-1.13.0` on its [reranking page](https://turbopuffer.com/docs/reranking) as a preview, and it wasn't enabled for my org, so this walkthrough calls Jev through TypeSafe's API instead (see [Jev](#jev)).
 
 ### 1. Download ESCI
 
@@ -125,9 +125,9 @@ Each product becomes a turbopuffer document with:
 - `text`, made from the title, brand, color, and the first 800 characters of the description. turbopuffer embeds this field itself, so you don't need a separate embedding API, and rerankers and judges read it too.
 - `brand` and `color`, filterable
 
-New turbopuffer orgs get 2M embedding tokens per minute per model. Eight parallel writers hit that in a few seconds, so the script paces itself to 1.5M tokens a minute and backs off if it still gets a 429. Each request already carries 256 products, the most turbopuffer accepts when it does the embedding, so the token limit is what sets the speed. If your org has a higher limit, raise `--tokens-per-minute`.
+New turbopuffer orgs get 2M embedding tokens per minute per model ([embedding docs](https://turbopuffer.com/docs/embedding)). Eight parallel writers hit that in a few seconds, so the script paces itself to 1.5M tokens a minute and backs off if it still gets a 429. Each request already carries 256 products, the most turbopuffer accepts when it does the embedding ([limits](https://turbopuffer.com/docs/limits)), so the token limit is what sets the speed. If your org has a higher limit, raise `--tokens-per-minute`.
 
-`--scope full` loads all 482k products: about 72M embedding tokens, which took me about 70 minutes. The pacer estimates tokens at 4 characters each, which runs high for these products, so real throughput was about 1M tokens a minute rather than the 1.5M budget. A load that long can outlast the rate-limit retries on a batch or two. Mine stopped at 480k products, and `--resume` (which lists what the namespace already has and writes only the rest) finished the last 1,024 in a few seconds.
+`--scope full` loads all 482k products. That's every product ESCI judged for at least one query, so even the full corpus has no products from outside the labeled set; a product just isn't labeled for most queries. Real catalogs have more junk to wade through, so expect absolute scores on your own data to run lower. The full load is about 80M embedding tokens (§17 of [`evidence.txt`](experiments/results/evidence.txt)). That's an estimate: turbopuffer reported 42.6M tokens for the first 286,720 products (171M characters, so 4.0 characters a token), and the whole corpus is 323M characters, so the later products are longer. My first full run wrote those 286,720 products in 42 minutes, about 1M tokens a minute against the pacer's 1.5M budget, then stopped on a 429 the script didn't catch yet. I didn't keep the log of the run that finished, so I don't have its final token count or time. With a higher embedding limit, or vectors you computed yourself, the load would go faster. A load that long can outlast the rate-limit retries on a batch or two. Mine stopped at 480k products, and `--resume` (which lists what the namespace already has and writes only the rest) finished the last 1,024 in a few seconds.
 
 ### 4. Search
 
@@ -200,49 +200,60 @@ Two rules keep it honest. A run reranked by Jev is never scored by Jev, because 
 
 Grades are saved as they come back, every 25 queries, and pairs already graded are skipped on a rerun.
 
+One thing to know about a judge's nDCG: its ideal ranking is built from the pool, so a run's score depends on which other runs were pooled with it. Voyage scores 0.897 under Jev when pooled with three other runs, 0.861 with eight, and 0.854 with nine (evidence §9). Compare judge scores only between runs scored together in the same step 8 call.
+
 ## What the 500-query run showed
 
-All 482,105 products in the namespace, 500 stratified queries, `aws-us-east-1`, scripts run from a laptop, so wall-clock times include the trip over the public internet. Every reranker reorders the same hybrid top 50.
+All 482,105 products in the namespace, 500 stratified queries, `aws-us-east-1`, scripts run from a laptop, so wall-clock times include the trip over the public internet. Every reranker reorders the same hybrid top 50. The section numbers (§) point to the matching part of [`experiments/results/evidence.txt`](experiments/results/evidence.txt).
 
-| Retriever | Reranker | nDCG@10 [95% CI] | Condensed | MRR@10 | vs hybrid [95% CI] | p50 ms |
-| --- | --- | --- | --- | --- | --- | --- |
-| hybrid-rrf | voyage/rerank-3 | 0.463 [0.436, 0.489] | 0.635 | 0.695 | +0.096 [+0.080, +0.111] | 362 |
-| hybrid-rrf | jev:jev-1.13.0 | 0.452 [0.425, 0.478] | 0.638 | 0.685 | +0.085 [+0.068, +0.102] | 499 |
-| hybrid-rrf | zeroentropy/zerank-2 | 0.441 [0.414, 0.467] | 0.630 | 0.664 | +0.074 [+0.057, +0.090] | 412 |
-| hybrid-rrf | cohere/rerank-v3.5 | 0.436 [0.409, 0.462] | 0.625 | 0.657 | +0.070 [+0.054, +0.085] | 433 |
-| hybrid-rrf | llm:google/gemma-3-27b-it | 0.435 [0.408, 0.460] | 0.637 | 0.666 | +0.068 [+0.050, +0.085] | 3,520 |
-| hybrid-rrf | none | 0.367 [0.340, 0.392] | 0.610 | 0.592 | base | 160 |
-| ann | none | 0.350 [0.322, 0.376] | 0.583 | 0.572 | -0.017 [-0.032, -0.002] | 130 |
-| bm25-title | none | 0.332 [0.305, 0.356] | 0.525 | 0.548 | -0.035 [-0.052, -0.019] | 69 |
-| bm25 | none | 0.311 [0.286, 0.335] | 0.523 | 0.528 | -0.056 [-0.069, -0.043] | 156 |
+| Retriever | Reranker | nDCG@10 [95% CI] | vs hybrid [95% CI] | Condensed | vs hybrid, condensed | MRR@10 | Wall p50 ms | turbopuffer server p50 / p99 ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| hybrid-rrf | voyage/rerank-3 | 0.463 [0.436, 0.489] | +0.096 [+0.080, +0.111] | 0.635 | +0.025 [+0.019, +0.032] | 0.695 | 362 | 248 / 535 |
+| hybrid-rrf | jev:jev-1.13.0 | 0.452 [0.425, 0.478] | +0.085 [+0.068, +0.102] | 0.638 | +0.029 [+0.021, +0.036] | 0.685 | 499 | 103 / 322 + Jev |
+| hybrid-rrf | zeroentropy/zerank-2 | 0.441 [0.414, 0.467] | +0.074 [+0.057, +0.090] | 0.630 | +0.020 [+0.013, +0.027] | 0.664 | 412 | 291 / 533 |
+| hybrid-rrf | cohere/rerank-v3.5 | 0.436 [0.409, 0.462] | +0.070 [+0.054, +0.085] | 0.625 | +0.015 [+0.009, +0.022] | 0.657 | 433 | 314 / 728 |
+| hybrid-rrf | llm:google/gemma-3-27b-it | 0.435 [0.408, 0.460] | +0.068 [+0.050, +0.085] | 0.637 | +0.027 [+0.019, +0.034] | 0.666 | 3,520 | 103 / 322 + Gemma |
+| hybrid-rrf | none | 0.367 [0.340, 0.392] | base | 0.610 | base | 0.592 | 160 | 103 / 322 |
+| ann | none | 0.350 [0.322, 0.376] | -0.017 [-0.032, -0.002] | 0.583 | -0.026 [-0.042, -0.012] | 0.572 | 130 | 75 / 96 |
+| bm25-title | none | 0.332 [0.305, 0.356] | -0.035 [-0.052, -0.019] | 0.525 | -0.085 [-0.102, -0.069] | 0.548 | 69 | 15 / 36 |
+| bm25 | none | 0.311 [0.286, 0.335] | -0.056 [-0.069, -0.043] | 0.523 | -0.087 [-0.102, -0.072] | 0.528 | 156 | 100 / 300 |
 
-Recall@50 is 0.471 for every hybrid row, since rerankers only reorder.
+Recall@50 is 0.471 for every hybrid row, since rerankers only reorder (§1). Wall time is what my laptop saw, about 45 to 55 ms of it the round trip to `aws-us-east-1`; server time is what turbopuffer reports, summed over both requests for the hosted rerankers. Jev and Gemma run outside turbopuffer, so their server column is only the retrieval.
 
 What I take from it:
 
-- Every reranker is a clear win over plain hybrid. The paired intervals sit well above zero, from +0.068 to +0.096 nDCG@10.
-- **Jev and Voyage are close, and which one "wins" depends on how you count unlabeled products.** Head to head, Voyage leads Jev by 0.011 on standard nDCG@10 (95% CI -0.022 to 0.000). On condensed nDCG, which ignores unlabeled products, Jev leads by 0.003 (-0.002 to +0.009). The gap comes from the labels: 58% of Jev's top 10 has no human label, against 55% of Voyage's, and standard nDCG counts every unlabeled product as irrelevant. I'd call it a tie. A judge doesn't have this problem, because it grades whatever your system returns.
-- **Gemma, read through logprobs, reranks about as well as Cohere** but takes 3.5 seconds a query, which rules it out for serving. Per query, Jev added a median 323 ms over the network from my laptop; Voyage, which runs inside turbopuffer, added 191 ms.
-- Vector search beat BM25 here, and fusing them beat both. BM25 over titles alone beat BM25 over title and body, which surprised me. My guess is that long product bodies match too many query words, but I haven't checked.
+- **Every reranker beats plain hybrid on both measures.** The paired intervals sit above zero, from +0.068 to +0.096 on standard nDCG@10 and +0.015 to +0.029 on condensed (§1). The condensed gains are 2.5 to 4.7 times smaller. Reranked runs also have fewer unlabeled products in their top 10 (55% to 60%, against 63% for hybrid, §3), so part of a reranker's gain on standard nDCG likely comes from pulling labeled products up past unlabeled ones, which condensed nDCG ignores. The order shifts too: on condensed, Jev (+0.029) and Gemma (+0.027) edge past Voyage (+0.025), but those three are within 0.004 of each other and no pair of them is significant even before correcting for multiple comparisons (p from 0.22 to 0.57, §4).
+- **Jev and Voyage are close, and which one "wins" depends on how you count unlabeled products.** Head to head, Voyage leads Jev by 0.011 on standard nDCG@10 (95% CI -0.022 to 0.000, p = 0.08). On condensed nDCG, Jev leads by 0.003 (-0.002 to +0.009). Per query, Jev did better on 198, Voyage on 202, and 100 tied (§2). The standard-nDCG gap tracks the labels: 58% of Jev's top 10 has no human label, against 55% of Voyage's (§3), and standard nDCG counts every unlabeled product as irrelevant. I'd call it a tie I can't break with 500 queries. A judge doesn't have this problem, because it grades whatever your system returns.
+- **Jev beats Cohere and Gemma as a reranker** on standard nDCG (by 0.016 and 0.018, both intervals above zero), and is level with zerank-2 (+0.011, interval -0.000 to +0.022) (§2).
+- **Gemma, read through logprobs, reranks about as well as Cohere** but takes 3.5 seconds a query, which rules it out for serving. Per query, Jev added a median 323 ms over the network from my laptop. Voyage, called through turbopuffer's `rerank_by`, added 191 ms of wall time, of which 132 ms was turbopuffer's server time and the rest a second round trip (§1). Zerank-2 and Cohere added 181 and 197 ms of server time.
+- **Vector search beat BM25, and fusing them beat both** (§1). That's with this BM25 setup (title counted twice, plus a long, noisy body field) and voyage-4-lite, a small, cheap embedding model; other choices could change it.
+- **BM25 over titles alone beat BM25 over title and body on standard nDCG, but that's a label artifact.** On condensed nDCG the two are 0.002 apart (p = 0.77, §4), and title-only BM25 has slightly fewer unlabeled products in its top 10 (65.5% against 66.9%, §3). Treat them as equal.
 - The 50-query smoke run had the right order but wide intervals. It's good for checking the pipeline, but too small to choose between rerankers.
 
-`uv run scripts/05_score.py --by-slice` breaks this down by query type. Short unbranded queries (the most common kind) are the hardest for everything, topping out at 0.377 nDCG@10.
+`uv run scripts/05_score.py --by-slice` breaks this down by query type (§13). Most queries (278 of 500) are medium-length and unbranded. The hardest slices are short unbranded (83 queries, hybrid 0.299, best Voyage at 0.377) and long unbranded (58 queries, hybrid 0.293, best Gemma at 0.359). Medium and long queries that name a brand score highest (hybrid 0.507 and 0.502). The branded short and long slices have 15 and 11 queries, too few to read a winner from.
 
 ### Judges against humans (step 7)
 
-200 held-out pairs, 50 per grade:
+200 held-out pairs, 50 per grade. Brackets are 95% bootstrap intervals over pairs (§6). Latency and cost are from step 7's printout on my run; the warehouse doesn't store them, so the latency lines are saved in [`experiments/results/judge_bakeoff_latency.txt`](experiments/results/judge_bakeoff_latency.txt).
 
-| Judge | Exact | Within 1 | Weighted kappa | r(expected, human) | p50 ms | Cost |
+| Judge | Exact [95% CI] | Within 1 | Weighted kappa [95% CI] | r(expected, human) | p50 ms | Cost |
 | --- | --- | --- | --- | --- | --- | --- |
-| jev-1.14.0 | 0.55 | 0.78 | 0.41 | 0.48 | 118 | under $0.01 |
-| jev-1.13.0 | 0.52 | 0.75 | 0.38 | 0.46 | 110 | under $0.01 |
-| jev-1.13.0, batched | 0.52 | 0.75 | 0.37 | 0.45 | 111 | under $0.01 |
-| llama-4-maverick | 0.41 | 0.78 | 0.37 | 0.39 | 435 | $0.015 |
-| gpt-4o-mini | 0.39 | 0.74 | 0.34 | 0.40 | 656 | $0.009 |
-| gemma-3-27b-it | 0.44 | 0.74 | 0.33 | 0.34 | 501 | $0.004 |
-| llama-3.1-8b-instruct | 0.36 | 0.66 | 0.28 | 0.34 | 500 | $0.002 |
+| jev-1.14.0 | 0.55 [0.48, 0.62] | 0.78 | 0.41 [0.28, 0.54] | 0.48 | 118 | under $0.01 |
+| jev-1.13.0 | 0.52 [0.45, 0.58] | 0.75 | 0.38 [0.25, 0.50] | 0.46 | 110 | under $0.01 |
+| jev-1.13.0, batched | 0.52 [0.46, 0.59] | 0.75 | 0.37 [0.25, 0.49] | 0.45 | 111 | under $0.01 |
+| gemma-3-27b-it | 0.44 [0.38, 0.50] | 0.74 | 0.33 [0.20, 0.46] | 0.34 | 501 | $0.004 |
+| llama-4-maverick | 0.41 [0.35, 0.48] | 0.78 | 0.37 [0.24, 0.49] | 0.39 | 435 | $0.015 |
+| gpt-4o-mini | 0.39 [0.32, 0.45] | 0.74 | 0.34 [0.22, 0.47] | 0.40 | 656 | $0.009 |
+| llama-3.1-8b-instruct | 0.36 [0.29, 0.43] | 0.66 | 0.28 [0.14, 0.41] | 0.34 | 500 | $0.002 |
 
-None of these judges matches the humans on single grades very often. Some of that is the task: whether a product is Exact or a Substitute often turns on a size or brand detail that people read differently. Jev has the highest exact agreement and correlation, ties the best LLM (llama-4-maverick) on kappa and within-1, and is about four to six times faster. The newer Jev 1.14.0 is a little better than 1.13.0. Batching a query's products into one request gives the same answers as sending them one at a time.
+None of these judges matches the humans on single grades very often. Some of that is the task: whether a product is Exact or a Substitute often turns on a size or brand detail that people read differently.
+
+With 200 pairs the intervals are wide, so here's what holds up when you compare judges on the same pairs (§6):
+
+- **Jev 1.13.0 beats the LLMs on exact agreement.** It's 0.080 ahead of Gemma (interval +0.005 to +0.160) and 0.105 ahead of llama-4-maverick (+0.035 to +0.170). On kappa the intervals overlap, so I can't say Jev beats maverick there.
+- **It's four to six times faster** than the LLMs (110 ms against 435 to 656 ms).
+- **Jev 1.14.0 against 1.13.0 is a wash on these 200 pairs** (+0.035 exact, interval -0.010 to +0.080). On the 3,692 pooled pairs in step 8 the gap is clear; see below.
+- **Batching doesn't change the answers beyond run-to-run noise.** Every bake-off query has one pair, so `jev:` and `jev-batched:` sent identical requests here; their grades still differed on 4.5% of pairs, which is Jev's test-retest noise. A separate experiment regraded 3,177 pooled pairs in real 50-product batches, once in the same order and once reversed: 97.7% and 97.3% of grades matched the stored ones (§12). Order inside a batch makes no difference I can measure.
 
 ### Judges ranking systems (step 8)
 
@@ -264,16 +275,67 @@ nDCG@10 for each run under each judge:
 
 The italic cells show why a judge never scores its own reranker. Jev rates the Jev-reranked run 0.983 and Gemma rates the Gemma-reranked run 0.987: of course they do, each one sorted the results by its own opinion. Those runs are left out of that judge's agreement numbers.
 
-| Judge | Runs ranked | Kendall's tau vs human | vs human, condensed | Exact agreement on labeled pairs | Weighted kappa |
+Tau intervals resample the 500 queries; agreement intervals resample queries too, keeping each query's pairs together (§7). All three judges are compared on the same 3,692 labeled pool pairs.
+
+| Judge | Runs ranked | Kendall's tau vs human [95% CI] | vs human, condensed | Exact agreement [95% CI] | Weighted kappa [95% CI] |
 | --- | --- | --- | --- | --- | --- |
-| Jev 1.13.0 | 8 | 0.857 | 0.786 | 0.60 (3,907 pairs) | 0.44 |
-| Gemma 3 27B | 8 | 0.857 | 0.929 | 0.58 (3,692 pairs) | 0.40 |
+| Jev 1.13.0 | 8 | 0.857 [0.71, 1.00] | 0.786 [0.64, 0.93] | 0.599 [0.570, 0.630] | 0.436 [0.387, 0.483] |
+| Jev 1.14.0 | 8 | 0.857 | 0.786 | 0.631 | 0.471 |
+| Gemma 3 27B | 8 | 0.857 [0.79, 0.93] | 0.929 [0.86, 1.00] | 0.575 [0.547, 0.600] | 0.402 [0.354, 0.445] |
 
-A tau of 0.857 across 8 runs means 26 of the 28 pairs of runs come out in the same order as with the human labels. For Jev, the two pairs that flipped are Cohere against Gemma, which the humans have 0.001 apart, and Voyage against zerank-2. That second one is a real miss: the humans put Voyage ahead by 0.022 (paired CI 0.013 to 0.032), and Jev has zerank-2 ahead by 0.004. The decisions with big gaps all match: reranked beats not reranked, hybrid beats vector alone, vector beats BM25. So I'd trust a Jev verdict between setups that differ by a lot, and want human labels before acting on a difference of 0.02.
+A tau of 0.857 across 8 runs means 26 of the 28 pairs of runs come out in the same order as with the human labels. For Jev, the two pairs that flipped are Cohere against Gemma, which the humans have 0.001 apart, and Voyage against zerank-2. That second one is a real miss: the humans put Voyage ahead by 0.022 (paired CI 0.012 to 0.031, §2), and Jev has zerank-2 ahead by 0.004. The decisions with big gaps all match: reranked beats not reranked, hybrid beats vector alone, vector beats BM25. Only 9 of the 28 pairs are within 0.03 of each other on human nDCG (§7), and those are where every flip happens. So I'd trust a Jev verdict between setups that differ by a lot, and want human labels before acting on a difference of 0.02.
 
-Single-grade agreement is higher here than in step 7 (0.60 against 0.52 for Jev) because these pairs are mostly what good systems return, Exact and Substitute products, rather than a balanced mix.
+**Jev 1.14.0 is the better judge.** Graded against the same pool, it agrees with the humans on 0.031 more of the labeled pairs than 1.13.0 (interval +0.019 to +0.045), and its kappa is 0.471 against 0.436 (§15). Its tau is the same (from a step 8 run on a copy of the warehouse, logged in [`experiments/README.md`](experiments/README.md)), and as a reranker it's level with 1.13.0 (-0.001, interval -0.007 to +0.004). The two versions give the same grade on 87.8% of pairs. If you're starting fresh, use 1.14.0 as the judge; I kept 1.13.0 for the main runs to match what turbopuffer hosts.
 
-Gemma ranks systems about as well (tied on standard nDCG, better on condensed), at four times the latency. For an eval loop you run on every change, I'd use Jev and check it against a hundred or so human labels on your own data now and then.
+Single-grade agreement is higher here than in step 7 (0.60 against 0.52 for Jev), and it isn't because the pool is mostly Exact products. Reweighting the pool to an even mix of grades still gives 0.572 (§8). The difference is which products of each grade show up. On human-Exact products, Jev agrees 66% of the time in the pool but 36% in the bake-off. The Exacts a good search system returns are the obvious ones, while the bake-off draws Exacts at random, including the borderline cases.
+
+Gemma ties Jev on standard nDCG and has a higher tau on condensed nDCG (0.929 against 0.786), but the intervals overlap, so I can't call Gemma better there. It's also four to five times slower. For an eval loop you run on every change, I'd use Jev and check it against a few hundred human labels on your own data now and then (the protocol is [below](#how-much-to-trust-these-numbers)).
+
+## How much to trust these numbers
+
+`uv run experiments/evidence.py` recomputes every figure above from the warehouse and writes [`experiments/results/evidence.txt`](experiments/results/evidence.txt). It's read-only and takes a few seconds. Here's what it says about the limits:
+
+- **500 queries can separate rerankers about 0.012 to 0.019 apart** on standard nDCG@10 (80% power, §5). Voyage against Jev (0.011) is below that, which is why I call it a tie.
+- **Many comparisons, a few false alarms.** I compared 36 pairs of runs. 30 are significant at p < 0.05, and 26 survive a Bonferroni correction (§4). The four that drop out are two close reranker pairs (Jev against Gemma and against Cohere), BM25 title-only against title and body, and hybrid against vector. I've avoided naming a winner on the reranker pairs.
+- **The gain function doesn't matter here.** Exponential, linear, and binary gains put the nine runs in the same order (§10).
+- **Jev isn't perfectly repeatable.** The same request sent twice gave a different grade 4.5% of the time (§6). Over hundreds of queries that averages out, but don't read much into one query's grades.
+- **The human labels aren't ground truth either.** ESCI is built from "difficult Amazon search queries and results" ([Reddy et al., 2022](https://arxiv.org/abs/2206.06588)), so the labeled products are ones Amazon's search returned. On negation queries, 74% of the disagreements I audited were the human label getting it wrong (§11).
+- **Jev and the LLMs may have seen ESCI in training.** It's a public dataset from 2022. I can't rule out that some of the agreement is memory, which is one more reason to calibrate on your own labels.
+- **The judges read a shortened product.** They see the title, brand, color, and first 800 characters of the description, and the humans saw the full product page. Raising the limit to 4,000 characters didn't help: exact agreement went from 0.600 to 0.606 and kappa from 0.410 to 0.406 on 1,091 pairs (§12).
+
+### Calibrating on your own data
+
+The ESCI numbers tell you Jev can rank systems. They don't tell you it understands your domain. Before you trust it on your data:
+
+1. Label at least 300 (query, result) pairs yourself, from the pooled top 10 of the runs you care about, so the labels cover what your systems return, not a random sample of the catalog.
+2. Load them with `02_prepare_custom.py --judgments` and run step 8. Look at exact agreement and kappa with their intervals, and at the disagreements query by query. They'll tell you which rubric lines to rewrite.
+3. Keep 50 of those pairs aside as a retest set. Regrade them whenever you change the rubric or the Jev version, and if agreement drops, find out why before you trust new results.
+
+## Follow-up experiments
+
+[`experiments/`](experiments/) has the experiments the review raised: the negation audit, batch order, description length, and Jev 1.14.0. [`experiments/README.md`](experiments/README.md) lists each one with its command and result.
+
+### What turbopuffer did during the runs
+
+[`experiments/turbopuffer_perf.py`](experiments/turbopuffer_perf.py) reran the three first-stage retrievers twice and saved every field turbopuffer returns ([`turbopuffer_perf.txt`](experiments/results/turbopuffer_perf.txt)). [`experiments/retrieval_followups.py`](experiments/retrieval_followups.py) ran the rest ([`retrieval_followups.txt`](experiments/results/retrieval_followups.txt)). Every query ran one at a time from my laptop against `aws-us-east-1`, so none of this says anything about throughput under concurrency.
+
+**Where does the time go?** Mostly the network. The laptop's round trip was a median of about 54 ms (§1), and turbopuffer's server time was 76 ms for ANN, 102 ms for BM25, and 103 ms for hybrid at p50. Of ANN's 76 ms, 66 ms was embedding the query text. Hybrid's server time is about BM25's alone, not the sum of the two.
+
+**Why is the BM25 tail so long?** The body field and long queries. Body-only BM25 went from a 29 ms median on one-word queries to 260 ms on queries of six words or more, and title-only BM25 stayed between 13 and 29 ms. Title-only BM25 also scored higher on nDCG@10 (0.332 against 0.311, +0.020 [+0.008, +0.033]), though some of that is the label artifact described in [the results](#what-the-500-query-run-showed).
+
+**Was the cache warm, and are results stable?** Every query in both passes reported `cache_temperature: hot`, so these are warm numbers; I didn't test a cold namespace. The second pass returned the same top 10 for 100% of BM25 queries and 99.4% of ANN and hybrid queries.
+
+**How much recall does ANN give up?** Almost none. turbopuffer's recall endpoint measured 0.994 at 50 and 0.995 at 10 against exhaustive search, over 100 query vectors it samples from the namespace. It doesn't take text queries, so this measures the index rather than these exact 500 queries.
+
+**Was the namespace fully indexed?** No. Every response reported 9,785 documents (2% of 482,105) searched exhaustively because they weren't indexed yet. I didn't measure how long indexing takes to catch up.
+
+**Can hybrid plus a hosted reranker be one request?** Yes. turbopuffer's [reranking docs](https://turbopuffer.com/docs/reranking) allow `rerank_by` on a `multi_query`, which reranks the union of the subqueries' results. With Voyage, median wall time fell from 362 ms (two requests) to 308 ms, server time stayed level (248 against 245 ms), and nDCG@10 rose 0.006 [+0.003, +0.010], since the reranker sees the union instead of the fused top 50. Asking each subquery for 100 results raised it 0.016 [+0.010, +0.022] at 323 ms.
+
+**What do filters cost?** Almost nothing in time. On the 81 sampled queries that name a brand, filtering hybrid search to that brand moved median server time from 79 to 77 ms and raised nDCG@10 from 0.477 to 0.524 (+0.047 [+0.001, +0.096]). I took the brand from the products humans labeled Exact, so that gain is an upper bound on what a real brand detector would get.
+
+**How does this compare with Elastic's Jev test?** [Elastic](https://www.elastic.co/search-labs/blog/ecommerce-search-reranking-llm-alternative-jev) reranked only each query's judged products. Doing the same on these 500 queries, Jev scored 0.868 nDCG@10 and Voyage 0.848 (+0.020 [+0.010, +0.029]); with the KDD Cup gains (Exact 1, Substitute 0.1, Complement 0.01) it was 0.817 against 0.801 (+0.016 [+0.003, +0.029]). Elastic reported 0.9565 for Jev and 0.8595 for a random order. Ordering by product id scored 0.679 here, so the two setups don't compute nDCG the same way and the absolute numbers don't compare. The direction does: on judged products only, Jev beats Voyage. On turbopuffer's real top 50 they tie.
+
+**What's still open?** Throughput and tail latency from inside the region under concurrent load, a cold namespace, and write throughput with vectors computed ahead of time instead of embedded by turbopuffer.
 
 ## Part 2: your own data
 
@@ -402,7 +464,7 @@ WHERE r.run_id = 'hybrid-rrf-full-4cea30'        -- your run id
 ORDER BY r.rank;
 ```
 
-On my first sampled query, a search for women's T-shirt dresses, the humans had graded 2 of the top 10. Jev graded all 10 and called 6 of them Exact.
+On my first sampled query, "t shirt dresses for women sexy", the humans had graded 2 of hybrid's top 10. Jev graded all 10 and called 6 of them Exact (§16).
 
 **Where Jev and the humans disagree hardest.**
 
@@ -418,21 +480,25 @@ ORDER BY j.prob DESC
 LIMIT 20;
 ```
 
-This one found something I hadn't looked for. The top of the list was "boys swim trunks without mesh lining", "face masks without nose wire", "hand sanitizer without alcohol", and "1 12 off-road vehicle not rc": products the humans called Exact and Jev called Irrelevant with near-certainty. Splitting the pairs on a negation word in the query makes it a number:
+This one found something I hadn't looked for. The top of the list was "boys swim trunks without mesh lining", "face masks without nose wire", "hand sanitizer without alcohol", and "1 12 off-road vehicle not rc": products the humans called Exact and Jev called Irrelevant with near-certainty. Splitting the human-Exact products on a negation word in the query makes it a number. The regex also catches the flower "forget me not", so the query drops it:
 
 ```sql
-SELECT regexp_matches(lower(q.text), '\b(without|not|no|non)\b') AS negation,
-       count(*) AS pairs,
-       round(avg((h.grade = 3 AND j.grade = 0)::INT), 3) AS exact_called_irrelevant,
-       round(avg((h.grade = j.grade)::INT), 3) AS exact_agreement
+SELECT regexp_matches(lower(q.text), '\b(without|not|no|non)\b')
+           AND NOT contains(lower(q.text), 'forget me not') AS negation,
+       count(DISTINCT q.query_id) AS queries,
+       count(*) AS human_exact,
+       round(avg((j.grade = 0)::INT), 3) AS jev_called_irrelevant
 FROM judgments h
 JOIN judgments j USING (dataset, query_id, doc_id)
 JOIN queries q USING (dataset, query_id)
-WHERE h.dataset = 'esci-us' AND h.source = 'human' AND j.source = 'jev-batched:jev-1.13.0'
+WHERE h.dataset = 'esci-us' AND h.source = 'human' AND h.grade = 3
+  AND j.source = 'jev-batched:jev-1.13.0' AND q.sampled
 GROUP BY ALL;
 ```
 
-On the 278 labeled pairs from negation queries, Jev called an Exact product Irrelevant 17.3% of the time, against 3.7% on the other 3,629. I haven't checked how many of those are Jev missing the negation and how many are products that really do have the mesh lining. Either way, it's a rubric line worth adding ("a product that has what the query excludes is Irrelevant") and the kind of slice I'd watch on my own data.
+On 138 human-Exact products from 27 negation queries, Jev said Irrelevant 31.2% of the time, against 6.6% of 2,121 on the other 409 queries (§11).
+
+So who's wrong? [`experiments/negation_audit.py`](experiments/negation_audit.py) exports every one of those disagreements with both grades hidden, for a third rater to answer one question: does the product have the thing the query excludes? I had a Claude model do the rating, given only the query and the product text. Of the 43 pairs on real negations, the product had the excluded thing in 32 (74%), so the human label was wrong and Jev was right. Jev was wrong on 4, and on 7 the product text didn't say (§11). My guess is that ESCI's graders matched on the product type and skipped the "without". That's worth knowing before you trust any human labels on negation queries, and it's the kind of slice I'd watch on my own data.
 
 **How Jev's grades line up with the humans' (a confusion matrix).**
 
@@ -444,7 +510,7 @@ PIVOT (
 ) ON jev USING count(*) ORDER BY human;
 ```
 
-Rows are the human grade and columns are Jev's. On these pooled pairs, Jev's most common miss is grading a human Substitute (2) as Irrelevant (0): 216 of 1,075.
+Rows are the human grade and columns are Jev's. This counts every pair both have graded, including the 50-query smoke run's pool. Jev's most common miss is grading a human Substitute (2) as Irrelevant (0): 216 of 1,075.
 
 **How much of each run's top 10 has no human label.** This is the number behind the Jev and Voyage tie.
 
@@ -476,7 +542,7 @@ WHERE ru.config->>'namespace' = 'esci-us-full'
 GROUP BY ALL ORDER BY p50_ms;
 ```
 
-Each first-stage run queried 0.85 TB across 500 queries, which is $0.0009 at list price.
+BM25, title-only BM25, and vector search each queried 0.85 TB across 500 queries, and hybrid queried 1.71 TB because it runs two subqueries (§14). At list price that's under $0.002 per run.
 
 **One run by query slice.** Intervals are stored for `all` only.
 
@@ -531,23 +597,24 @@ List prices, from turbopuffer's [pricing page](https://turbopuffer.com/pricing) 
 
 | Item | What I used | Cost |
 | --- | --- | --- |
-| Embedding the corpus (voyage-4-lite, $0.02 / 1M tokens) | about 72M tokens | about $1.45 |
-| Writes ($2 / GB before batch discounts) | about 1.9 GB logical | under $4 |
-| Queries ($1 / PB queried, 1.28 GB minimum per query) | 1.7 GB per query, 3.4 GB for hybrid | under a cent for all of it |
+| Embedding the corpus (voyage-4-lite, $0.02 / 1M tokens) | about 80M tokens (323M characters at 4.0 a token) | about $1.60 |
+| Writes ($2 / GB, less batch discounts and 50% off non-filterable attributes) | about 1.9 GB logical, my estimate from the load | under $4 |
+| Queries ($1 / PB queried, at least 1.28 GB per query, plus bytes returned) | 1.71 GB per query, 3.42 GB for hybrid | under a cent for all of it |
+| Storage ($0.33 / GB) | the 482k-product namespace | well under $1 a month |
 | Hosted reranking ($0.05 / 1M tokens for voyage/rerank-3) | 500 queries x 50 candidates | roughly $0.30 per reranker, my estimate |
 | Jev ($0.042 / 1M input tokens) | reranking plus judging | well under $1 |
 | OpenRouter (three bake-offs, Gemma reranking and judging, smoke runs) | everything in this README | $0.91 in total |
 
-The query line surprised me. Each query bills the size of the namespace, with a 1.28 GB minimum (1.7 GB for the full namespace, twice that for hybrid), but at $1 per petabyte that's a fraction of a cent for thousands of queries. Writing and embedding the corpus once is most of the bill. On top of usage, turbopuffer plans have a monthly minimum ($16 on Launch).
+The query line surprised me. Each query bills the logical bytes it searched, which is the namespace's size, with a 1.28 GB floor: 1.71 GB per subquery on the full namespace, so 3.42 GB for hybrid (§14). The hosted rerank calls are queries too and bill the same way; the full runs didn't record those bytes. Even so, at $1 per petabyte it's a fraction of a cent for thousands of queries. Writing and embedding the corpus once is most of the bill. On top of usage, turbopuffer plans have a monthly minimum ($16 on Launch).
 
 ## Jev
 
-Jev doesn't return text. You send a `state` (here, the query) and typed questions (here, one 4-level `Score` per result), and it returns a probability for each level. The expected grade works as a ranking score, and the most likely grade works as a label. Elastic [tested it as an ESCI reranker](https://www.elastic.co/search-labs/blog/ecommerce-search-reranking-llm-alternative-jev), and part 1 repeats that test on turbopuffer.
+Jev doesn't return text. You send a `state` (here, the query) and typed questions (here, one 4-level `Score` per result), and it returns a probability for each level. The expected grade works as a ranking score, and the most likely grade works as a label. Elastic [tested it as an ESCI reranker](https://www.elastic.co/search-labs/blog/ecommerce-search-reranking-llm-alternative-jev), and part 1 runs a similar test on turbopuffer. The numbers aren't directly comparable: here every reranker sees turbopuffer's top 50 from the whole corpus, and unlabeled products count as irrelevant.
 
 There are two ways to call it:
 
-1. **TypeSafe's API** (`TYPESAFE_API_KEY`), which is what this repo does. [`src/relevancy/jev.py`](src/relevancy/jev.py) puts up to 50 results for one query into a single request as separate questions. That takes about as long as one result, and step 7 shows the answers don't change. Input is $0.042 per million tokens.
-2. **Inside turbopuffer**, as `typesafe/jev-1.13.0` in `rerank_by` (US regions only). It isn't on by default; ask turbopuffer to enable it. Then `uv run scripts/06_rerank.py --model typesafe/jev-1.13.0` reranks with no code changes, though that path only reranks; it can't hand back grades for judging.
+1. **TypeSafe's API** (`TYPESAFE_API_KEY`), which is what this repo does. [`src/relevancy/jev.py`](src/relevancy/jev.py) puts up to 50 results for one query into a single request as separate questions. That takes about as long as one result, and grades come back the same as one at a time within Jev's own run-to-run noise ([step 7](#judges-against-humans-step-7)). Input is $0.042 per million tokens.
+2. **Inside turbopuffer**, as `typesafe/jev-1.13.0` in `rerank_by`. turbopuffer's reranking page lists it as a preview with US inference, and it wasn't enabled for my org; ask turbopuffer about access. Then `uv run scripts/06_rerank.py --model typesafe/jev-1.13.0` reranks with no code changes, though that path only reranks; it can't hand back grades for judging.
 
 The judge names in this repo:
 
@@ -557,15 +624,15 @@ The judge names in this repo:
 | `jev-batched:jev-1.13.0` | all of a query's results in one request; the default for reranking and step 8 |
 | `openai/gpt-4o-mini`, or any OpenRouter model | an LLM read through logprobs |
 
-TypeSafe's API defaults to a newer Jev (1.14.0 when I ran this). I pinned 1.13.0 to match what turbopuffer hosts and what Elastic tested; step 7 shows how the two compare.
+TypeSafe's API defaults to a newer Jev (1.14.0 when I ran this). I pinned 1.13.0 to match what turbopuffer hosts and what Elastic tested. As a judge, 1.14.0 agrees with the humans more often ([step 8](#judges-ranking-systems-step-8)), so set `JEV_MODEL=jev-1.14.0` unless you need to match turbopuffer's hosted version.
 
 ## Why DuckDB + turbopuffer
 
-turbopuffer answers one question well: which 50 documents match this query, out of millions, in a few hundred milliseconds, with the data on object storage. It doesn't do joins, and its docs steer you away from big aggregations on the request path. Everything an eval asks after retrieval is a join or an aggregate. Which of these 50 did a human grade? Which did Jev grade, and how? What did the run cost? Did branded queries get worse after the reload? DuckDB runs in your process with no server, reads Arrow and Parquet, and turns nDCG into one SQL query.
+turbopuffer answers one question well: which 50 documents match this query, with the data on object storage. Here that meant 482k products and a median of 15 to 103 ms of server time per query, depending on the retriever (§1). It doesn't do joins across tables. Everything an eval asks after retrieval is a join or an aggregate. Which of these 50 did a human grade? Which did Jev grade, and how? What did the run cost? Did branded queries get worse after the reload? DuckDB runs in your process with no server, reads Arrow and Parquet, and turns nDCG into one SQL query.
 
 The split also keeps each side simple. turbopuffer never stores labels or run history, and DuckDB never stores vectors. `results` holds ids and ranks; titles and grades come from joins.
 
-Logging turbopuffer's response fields paid for itself right away. On the 21k-product smoke namespace, every first-stage query billed exactly 1.28 GB (turbopuffer's per-query minimum), and hybrid-rrf billed 2.56 GB because it runs two subqueries. I wouldn't have known without a `GROUP BY retriever`.
+Logging turbopuffer's response fields paid for itself right away. On the 21k-product smoke namespace, every first-stage query billed exactly 1.28 GB (turbopuffer's per-query minimum), and hybrid-rrf billed 2.56 GB because it runs two subqueries (§14). I wouldn't have known without a `GROUP BY retriever`.
 
 The scripts here hand-roll code any turbopuffer team would need for offline evals: pacing embedding writes under the token limit, backing off on 429s, reranking a fixed candidate set through an id filter, and logging billing per request. [`docs/duckdb-turbopuffer-connector.md`](docs/duckdb-turbopuffer-connector.md) sketches how to turn that into a reusable connector: a Python package that returns Arrow tables first, then a shared eval schema, and a native DuckDB extension only if those get used.
 
@@ -573,6 +640,7 @@ The scripts here hand-roll code any turbopuffer team would need for offline eval
 
 ```
 scripts/        the walkthrough, one numbered step per file
+experiments/    follow-up experiments and evidence.py, which recomputes every number here
 src/relevancy/  shared code: warehouse, turbopuffer queries, judges, metrics
 rubrics/        what "relevant" means, one TOML file per rubric
 warehouse/      schema.sql (checked in) and relevancy.duckdb (built by the scripts)
@@ -580,4 +648,4 @@ docs/           the project plan and the connector design
 data/           downloaded datasets (git-ignored)
 ```
 
-Every run records its config and git commit (marked `-dirty` if you had uncommitted changes), so any number in a results table traces back to what produced it.
+Every run records its config and git commit (marked `-dirty` if you had uncommitted changes), so any number in a results table traces back to what produced it. All nine 500-query runs here recorded `5212f86-dirty`: I ran them mid-edit, so the commit is close to, but not exactly, the code that produced them. The `config` column has the parameters that matter.

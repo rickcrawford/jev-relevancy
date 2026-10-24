@@ -4,9 +4,11 @@ Two scopes:
   smoke  the products judged for the sampled queries, plus random distractors
          (20,000 by default). About 21k products, 3.5M embedding tokens,
          3 minutes. Good for a first pass.
-  full   all 482k English products in the reduced ESCI set. About 80M
-         embedding tokens (~$1.60 with voyage-4-lite). Paced under the default
-         2M tokens/min limit, it takes about an hour.
+  full   all 482k English products in the reduced ESCI set, 323M characters
+         of embedded text. At the 4.0 characters per token turbopuffer reported
+         for the first 287k products, that's about 80M embedding tokens (~$1.60
+         with voyage-4-lite). Paced under the default 2M tokens/min limit, my
+         first attempt wrote 287k products in 42 minutes.
 
   uv run scripts/03_load_turbopuffer.py --scope smoke
   uv run scripts/03_load_turbopuffer.py --scope full
@@ -114,8 +116,7 @@ def main() -> None:
     pacer = Pacer(args.tokens_per_minute)
 
     def write(batch):
-        # ~4 characters per token is a deliberately high estimate; the real
-        # ratio for these products is closer to 5.5.
+        # ~4 characters per token; turbopuffer reported 4.0 for these products.
         pacer.wait(sum(len(row[3]) for row in batch) // 4)
         for attempt in range(6):
             try:
