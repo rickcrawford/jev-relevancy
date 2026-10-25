@@ -1,11 +1,15 @@
 [project]
 name = "relevancy"
 version = "0.1.0"
-description = "Search relevance lab: turbopuffer retrieval, hosted rerankers, nDCG in DuckDB"
+description = "Search evaluation with Jev as the judge. turbopuffer does the retrieval and hosted reranking, and DuckDB keeps every run and computes the metrics in SQL."
 authors = [
     { name = "Rick Crawford" }
 ]
 requires-python = ">=3.12"
+keywords = [
+    "search-evaluation", "information-retrieval", "relevance", "ndcg", "llm-as-a-judge", "reranking",
+    "hybrid-search", "vector-search", "bm25", "esci", "turbopuffer", "duckdb", "jev", "python",
+]
 dependencies = [
     "duckdb>=2.0.0",
     "pyarrow>=26.0.0",
