@@ -1,0 +1,21 @@
+# Wayfair's WANDS labels: Exact, Partial, Irrelevant. Three levels, so `grades`
+# maps them onto the warehouse's 0-to-3 scale: Partial counts as relevant
+# (grade 2), like ESCI's Substitute.
+
+state = "Shopping query on a furniture and home goods store: {query}"
+question = "How well does this product match the shopping query?"
+item = "Product"
+
+levels = [
+    "Irrelevant: the product doesn't match the query",
+    "Partial: the product matches part of the query, or is a close alternative",
+    "Exact: the product fully matches the query",
+]
+grades = [0, 2, 3]
+
+llm_prompt = """You judge how well a product from a furniture and home goods store matches a shopping query.
+Reply with one digit and nothing else.
+
+3 = Exact: the product fully matches the query.
+2 = Partial: the product matches part of the query, or is a close alternative.
+0 = Irrelevant: the product doesn't match the query."""

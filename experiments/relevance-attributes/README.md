@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | ESCI | about 10k Jev requests per attribute over 482k products | turbopuffer, TypeSafe |
+| Written, not run | ESCI | about 10k Jev requests per attribute over 482k products | turbopuffer, TypeSafe |
 
 Categories are the first case of this, in [`relevance-ontology`](../relevance-ontology/). Query-dependent checks like "without X" or a size can't be computed once per product, so they belong to [`relevance-constraints`](../relevance-constraints/).
 
@@ -19,6 +19,16 @@ Categories are the first case of this, in [`relevance-ontology`](../relevance-on
 ## What counts
 
 `attr-soft` against `hybrid` on the primary attribute's queries, nDCG@10. It counts if the lower bound is above zero. With 100 queries, expect to detect only a gain of about 0.04 or more. The secondary attribute is reported with a Bonferroni-corrected interval and doesn't count on its own. If label precision is under 0.9, stop before the retrieval runs.
+
+## Run
+
+```bash
+uv run relevancy show relevance-attributes                # the steps, and which are paid
+uv run relevancy run relevance-attributes            # dry run
+uv run relevancy run relevance-attributes --yes
+```
+
+After `check-export`, a person fills in the `rater` column of `results/check-replacement_part.csv` without opening the key file; then resume with `--from precision`. Add `--attribute for_kids` to a step for the secondary attribute.
 
 ## Needs
 

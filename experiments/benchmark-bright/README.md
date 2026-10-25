@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned; lowest priority | BRIGHT: biology, economics, LeetCode | small for Jev; the reasoning LLM is the cost | TypeSafe, OpenRouter |
+| Written, not run | BRIGHT: biology, economics, LeetCode | small for Jev; the reasoning LLM is the cost | TypeSafe, OpenRouter |
 
 Three domains, chosen in advance, covering science, social science, and code.
 
@@ -20,6 +20,16 @@ Three domains, chosen in advance, covering science, social science, and code.
 ## What counts
 
 The share of the reasoning LLM's gain the cascade keeps, per domain, with its cost per query: (cascade - BM25) / (LLM - BM25). Compare per domain only. The published averages (Rank1-32B 29.4, leaderboard 41 to 46) cover all 12 domains and don't compare with three.
+
+## Run
+
+```bash
+uv run relevancy show benchmark-bright                # the steps, and which are paid
+uv run relevancy run benchmark-bright            # dry run
+uv run relevancy run benchmark-bright --yes
+```
+
+Needs the `studies` extra. `llm` is the costly step; pass `--limit` to the script by hand to try a few queries first.
 
 ## Needs
 

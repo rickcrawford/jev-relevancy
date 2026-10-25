@@ -1,7 +1,38 @@
 title = "Semantic SQL operators and filter cascades"
 premise = "Jev makes LLM filters in SQL affordable at table scale."
-status = "planned"
+status = "ready"
 rank = 8
-keys = ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
-base = false
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = true
 decide = "SemBench text queries: quality within the published range at lower cost. Cascades: fewer LLM calls than an embedding first stage at the same recall-target miss rate."
+
+[[steps]]
+name = "pool"
+run = "uv run experiments/database-semantic-operators/filters.py pool"
+paid = true
+
+[[steps]]
+name = "sample"
+run = "uv run experiments/database-semantic-operators/filters.py sample"
+paid = false
+
+[[steps]]
+name = "oracle"
+run = "uv run experiments/database-semantic-operators/filters.py oracle"
+paid = true
+
+[[steps]]
+name = "escalate"
+run = "uv run experiments/database-semantic-operators/filters.py escalate"
+paid = true
+
+[[steps]]
+name = "embed"
+run = "uv run experiments/database-semantic-operators/filters.py embed"
+paid = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/database-semantic-operators/filters.py report"
+paid = false
+output = "results/report.txt"

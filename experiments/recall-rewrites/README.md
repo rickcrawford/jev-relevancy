@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned; run only if `recall-fusion` finds vocabulary misses | ESCI | an LLM call per query (rewrites) or per product (expansion) | turbopuffer, TypeSafe, OpenRouter |
+| Written, not run | ESCI | an LLM call per query (rewrites) or per product (expansion) | turbopuffer, TypeSafe, OpenRouter |
 
 Run this only if [`recall-fusion`](../recall-fusion/)'s diagnosis shows many Exact and Substitute products that nothing finds in 1,000, with low title overlap.
 
@@ -21,6 +21,16 @@ Generate five queries per product, index them as a new full-text field, and add 
 ## What counts
 
 Recall@50, since that's what the reranker sees, and nDCG@10 after Voyage. It counts if Recall@50 rises with a lower bound above zero and nDCG@10 after Voyage doesn't fall. Also report the latency the LLM call adds before search.
+
+## Run
+
+```bash
+uv run relevancy show recall-rewrites                # the steps, and which are paid
+uv run relevancy run recall-rewrites --scope smoke            # dry run
+uv run relevancy run recall-rewrites --scope smoke --yes
+```
+
+Run it only if `recall-fusion`'s diagnosis found vocabulary misses. `--scope smoke` checks the expansion plumbing cheaply; only `--scope full` decides.
 
 ## Needs
 

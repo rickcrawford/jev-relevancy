@@ -1,7 +1,34 @@
 title = "Reasoning retrieval: BRIGHT"
 premise = "As a first pass, Jev keeps most of a reasoning reranker's gain for less."
-status = "planned"
+status = "ready"
 rank = 13
-keys = ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
 base = false
 decide = "Share of the reasoning LLM's gain the cascade keeps, per domain, with cost per query. No pass mark."
+
+[[steps]]
+name = "load"
+run = "uv run experiments/benchmark-bright/bright.py load"
+paid = true
+
+[[steps]]
+name = "bm25"
+run = "uv run experiments/benchmark-bright/bright.py bm25"
+paid = true
+
+[[steps]]
+name = "jev"
+run = "uv run experiments/benchmark-bright/bright.py jev"
+paid = true
+
+[[steps]]
+name = "llm"
+run = "uv run experiments/benchmark-bright/bright.py llm"
+paid = true
+note = "100 reasoning-model calls a query"
+
+[[steps]]
+name = "report"
+run = "uv run experiments/benchmark-bright/bright.py report"
+paid = false
+output = "results/report.txt"

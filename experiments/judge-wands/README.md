@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | WANDS (MIT): 480 queries, 42,994 products, 233,448 labels | a few million embedding tokens; a few thousand Jev requests | turbopuffer, TypeSafe |
+| Written, not run | WANDS (MIT): 480 queries, 42,994 products, 233,448 labels | a few million embedding tokens; a few thousand Jev requests | turbopuffer, TypeSafe |
 
 This is the first question a prospect who isn't Amazon asks, and WANDS answers it on data anyone can use commercially. It also labels many products per query, so far fewer results go unlabeled than on ESCI.
 
@@ -23,7 +23,17 @@ Fixed before the run, against step 8 on ESCI (tau 0.857, interval 0.714 to 1.000
 
 Tau comes first, because it doesn't depend on how many grade levels there are. Kappa across a 3-level and a 4-level scale is only roughly comparable.
 
+## Run
+
+```bash
+uv run relevancy show judge-wands                # the steps, and which are paid
+uv run relevancy run judge-wands            # dry run
+uv run relevancy run judge-wands --yes
+```
+
+This runs the whole pipeline on WANDS as dataset `wands`, and needs no ESCI base.
+
 ## Needs
 
-- `rubric.py` requires exactly 4 levels (`LEVELS = 4`), and WANDS has 3 (Exact, Partial, Irrelevant). `agreement.weighted_kappa` already takes `k`.
-- A loader from WANDS's CSVs to `02_prepare_custom.py`'s inputs. `product.csv` also has a `category_hierarchy`, which can check [`relevance-ontology`](../relevance-ontology/) against real categories.
+- The WANDS files download in the first step (MIT). `rubrics/wands.toml` maps Exact, Partial, and Irrelevant to grades 3, 2, and 0.
+- `product.csv` also has a `category_hierarchy`, which can check [`relevance-ontology`](../relevance-ontology/) against real categories.

@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | TREC DL 2020 passage (primary); DL19 and LLMJudge (DL23) secondary | about 600 Jev requests per Jev version | TypeSafe; OpenRouter for an LLM reference |
+| Written, not run | TREC DL 2020 passage (primary); DL19 and LLMJudge (DL23) secondary | about 600 Jev requests per Jev version | TypeSafe; OpenRouter for an LLM reference |
 
 **Research only.** MS MARCO's terms say "intended for non-commercial research purposes only", so get a legal review before any result goes in customer-facing material. [`judge-wands`](../judge-wands/) makes the same claim on MIT data, which is why it ranks first and this one ranks seventh.
 
@@ -23,8 +23,18 @@ One primary comparison: Kendall's tau between the system rankings on DL20, with 
 - MS MARCO is more likely than ESCI to be in Jev's training data. Say so next to any result.
 - Ranking systems needs TREC's submitted runs, and the raw run files may need a NIST login. The fallback is this repo's own retrievers and rerankers on DL20: fewer systems, and a weaker tau.
 
+## Run
+
+```bash
+uv run relevancy show judge-trec                # the steps, and which are paid
+uv run relevancy run judge-trec            # dry run
+uv run relevancy run judge-trec --yes
+```
+
+Needs the `studies` extra (`uv sync --extra studies`) for `ir_datasets`. For tau, put TREC's submitted run files in a folder and run `uv run experiments/judge-trec/trec.py report --runs-dir <folder>` by hand.
+
 ## Needs
 
-- `ir_datasets`, whose document store downloads the full MS MARCO v1 passages (about 3 GB).
-- A script that grades every labeled pair. `07_judge_bakeoff.py` only samples 50 per grade from queries outside the sample.
-- For LLMJudge: its human test labels were hidden from participants, so join its ID mapping files to the official DL23 qrels.
+- `uv sync --extra studies` for `ir_datasets`, whose document store downloads the full MS MARCO v1 passages (about 3 GB).
+- `trec.py` covers DL19 and DL20. LLMJudge (DL23) isn't automated: its human test labels were hidden from participants, so it needs its ID mapping files joined to the official DL23 qrels first.
+- TREC's submitted run files for tau. The raw files may need a NIST login.

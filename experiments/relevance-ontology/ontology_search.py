@@ -429,7 +429,7 @@ def run_report(args) -> None:
     pairs.append(("onto-soft+voyage", "hybrid+voyage"))
 
     print("\n## Tagging")
-    tags = duckdb.sql(f"SELECT count(*), count(node) FROM '{DATA}/doc_tags-{args.scope}/*.parquet'").fetchone()
+    tags = duckdb.sql(f"SELECT count(*), count(node) FROM '{DATA}/doc_tags-{args.scope}/*.parquet'").fetchall()[0]
     print(f"  products: {tags[1]:,} of {tags[0]:,} got a category")
     depth = Counter(len(lineage[r["node"]]) for r in queries if r["node"])
     print(f"  queries: {sum(depth.values())} of {len(queries)} got a category; by depth "

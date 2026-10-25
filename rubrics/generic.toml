@@ -8,8 +8,10 @@
 #   LLMs  llm_prompt (or one built from the levels) as the system prompt,
 #         then "Query: ...  <item>: ...  Grade:". Reads one digit's logprobs.
 #
-# Keep exactly four levels, lowest first. The grade is the position (0 to 3),
-# and Recall@50 and MRR@10 count grade 2 and up as relevant.
+# Use four levels, lowest first: the grade is the position (0 to 3), and
+# Recall@50 and MRR@10 count grade 2 and up as relevant. A scale with two or
+# three levels adds `grades`, the 0-to-3 grade each level stands for (see
+# rubrics/wands.toml).
 
 state = "Search query: {query}"
 question = "How well does this result answer the search query?"

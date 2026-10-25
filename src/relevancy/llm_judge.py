@@ -40,6 +40,7 @@ class Grade:
     cost: float | None         # USD, as OpenRouter reports it
     provider: str | None
     error: str | None = None   # set when every attempt failed; the other fields are then empty
+    probs: dict[int, float] | None = None  # probability of each grade, when the judge gives one
 
 
 def client() -> httpx.Client:
@@ -53,21 +54,8 @@ def _failed(error: str | None) -> Grade:
     return Grade(None, None, None, float("nan"), None, None, error=error or "unknown error")
 
 
-def grade(http: httpx.Client, model: str, query: str, product: str, rubric: Rubric) -> Grade:
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": rubric.llm_prompt},
-            {"role": "user", "content": rubric.llm_user(query, product)},
-        ],
-        "max_tokens": 1,
-        "temperature": 0,
-        "logprobs": True,
-        "top_logprobs": 10,
-        # Only route to providers that actually return logprobs.
-        "provider": {"require_parameters": True},
-        "usage": {"include": True},
-    }
+def _post(http: httpx.Client, body: dict) -> tuple[dict | None, float, str | None]:
+    """POST to OpenRouter with retries. Returns (response JSON or None, latency ms, last error)."""
     data, latency, error = None, float("nan"), None
     for attempt in range(ATTEMPTS):
         retry_after = None
@@ -93,11 +81,30 @@ def grade(http: httpx.Client, model: str, query: str, product: str, rubric: Rubr
             error = f"{type(e).__name__}: {e}"[:200]
         except (httpx.HTTPStatusError, ValueError) as e:
             if isinstance(e, httpx.HTTPStatusError):  # a 4xx that retrying won't fix
-                return _failed(f"HTTP {e.response.status_code}")
+                return None, latency, f"HTTP {e.response.status_code}"
             error = f"bad JSON: {e}"[:200]
         if attempt < ATTEMPTS - 1:
             delay = retry_after if retry_after is not None else 2 ** attempt * random.uniform(0.5, 1.5)
             time.sleep(max(0.0, min(delay, MAX_SLEEP)))
+    return data, latency, error
+
+
+def grade(http: httpx.Client, model: str, query: str, product: str, rubric: Rubric) -> Grade:
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": rubric.llm_prompt},
+            {"role": "user", "content": rubric.llm_user(query, product)},
+        ],
+        "max_tokens": 1,
+        "temperature": 0,
+        "logprobs": True,
+        "top_logprobs": 10,
+        # Only route to providers that actually return logprobs.
+        "provider": {"require_parameters": True},
+        "usage": {"include": True},
+    }
+    data, latency, error = _post(http, body)
     if data is None:
         return _failed(error)
 
@@ -121,3 +128,22 @@ def grade(http: httpx.Client, model: str, query: str, product: str, rubric: Rubr
         p, expected = None, (float(g) if g is not None else None)
 
     return Grade(g, p, expected, latency, (data.get("usage") or {}).get("cost"), data.get("provider"))
+
+
+def complete(http: httpx.Client, model: str, system: str, user: str, max_tokens: int = 400,
+             json_mode: bool = False) -> str | None:
+    """One chat completion's text, or None if every attempt failed. For writing text
+    (rewrites, expansions) or JSON (extracted constraints, labels), not for grading."""
+    body = {
+        "model": model,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        "max_tokens": max_tokens,
+        "temperature": 0,
+        "usage": {"include": True},
+    }
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
+    data, _, _ = _post(http, body)
+    if data is None:
+        return None
+    return (data["choices"][0]["message"].get("content") or "").strip()

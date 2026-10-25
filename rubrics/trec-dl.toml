@@ -1,0 +1,13 @@
+# TREC Deep Learning passage judgments, in the wording LLMJudge gave its
+# participants (from the NIST assessor scale).
+
+state = "Search query: {query}"
+question = "How relevant is this passage to the search query?"
+item = "Passage"
+
+levels = [
+    "Irrelevant: the passage has nothing to do with the query",
+    "Related: the passage seems related to the query but does not answer it",
+    "Highly relevant: the passage has some answer for the query, but it may be unclear or hidden among extraneous information",
+    "Perfectly relevant: the passage is dedicated to the query and contains the exact answer",
+]

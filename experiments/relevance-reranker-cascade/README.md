@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | ESCI | ensembles: no new requests; cascades: about 500 per reranker | TypeSafe, turbopuffer |
+| Written, not run | ESCI | ensembles: no new requests; cascades: about 500 per reranker | TypeSafe, turbopuffer |
 
 ## Variants
 
@@ -26,6 +26,16 @@ Two kinds of win, each fixed in advance:
 
 Measure latency the same way for every variant: wall time from one client, each reranker call timed in the same loop. Jev is called directly and Voyage through turbopuffer, so compare the wall time each adds, not server time.
 
+## Run
+
+```bash
+uv run relevancy show relevance-reranker-cascade                # the steps, and which are paid
+uv run relevancy run relevance-reranker-cascade            # dry run
+uv run relevancy run relevance-reranker-cascade --yes
+```
+
+The ensembles run first and cost nothing; if they already answer the question, stop there.
+
 ## Needs
 
-A small script for the cascades.
+The base, nothing else.

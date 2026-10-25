@@ -9,6 +9,7 @@ characters and once at 4,000, and compares agreement with the humans.
 """
 
 import csv
+import sys
 from pathlib import Path
 
 from relevancy.agreement import weighted_kappa
@@ -69,4 +70,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        raise SystemExit(print(__doc__))
     main()

@@ -79,4 +79,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        raise SystemExit(print(__doc__))
     main()

@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | STaRK-Amazon ⚠️, then FollowIR ⚠️ | small | TypeSafe |
+| Written, not run | STaRK-Amazon ⚠️, then FollowIR ⚠️ | small | TypeSafe |
 
 ## STaRK-Amazon (first)
 
@@ -13,6 +13,16 @@ Product queries with text and relational conditions. Take the standard retriever
 ## FollowIR (second)
 
 p-MRR measures whether a reranker's ranking changes the right way when the instruction changes. FollowIR gives each query an original and an altered instruction; rerank with each in Jev's `state` and compute p-MRR with MTEB's code. It counts if the interval sits above zero, which would put Jev with the instruction-tuned models (FollowIR-7B, Promptriever) rather than with most rerankers.
+
+## Run
+
+```bash
+uv run relevancy show benchmark-instructions-stark                # the steps, and which are paid
+uv run relevancy run benchmark-instructions-stark            # dry run
+uv run relevancy run benchmark-instructions-stark --yes
+```
+
+`stark-retrieve` pulls in `stark-qa` and `bm25s` with `uv run --with`; `stark-qa` is heavy (it depends on PyTorch). FollowIR's steps need the `studies` extra. Run one benchmark with `--step`, e.g. `--from followir-load`.
 
 ## Needs
 

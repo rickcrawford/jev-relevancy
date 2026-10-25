@@ -1,7 +1,31 @@
 title = "Learning to rank"
 premise = "A trained ranker beats any single reranker, even trained on Jev's labels."
-status = "planned"
+status = "ready"
 rank = 9
 keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
 base = true
+files = ["data/raw/esci/shopping_queries_dataset_examples.parquet"]
 decide = "The model vs Voyage over the top 100 on the 500 test queries, nDCG@10 and condensed, lower bound above zero."
+
+[[steps]]
+name = "train-queries"
+run = "uv run experiments/relevance-ltr/ltr.py train-queries"
+paid = false
+
+[[steps]]
+name = "features"
+run = "uv run experiments/relevance-ltr/ltr.py features"
+paid = true
+note = "resumable"
+
+[[steps]]
+name = "train"
+run = "uv run experiments/relevance-ltr/ltr.py train"
+paid = false
+output = "results/train.txt"
+
+[[steps]]
+name = "report"
+run = "uv run experiments/relevance-ltr/ltr.py report"
+paid = false
+output = "results/report.txt"

@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | SemBench ⚠️ (text queries); ESCI products | small for Jev; the expensive LLM that labels ground truth is the cost | TypeSafe, OpenRouter |
+| Written, not run | SemBench ⚠️ (text queries); ESCI products | small for Jev; the expensive LLM that labels ground truth is the cost | TypeSafe, OpenRouter |
 
 The buyer here is a data team, not a search team, so it ranks below the search studies.
 
@@ -22,6 +22,16 @@ Jev's probability decides the clear cases of a condition, and an LLM decides the
 4. Pick cutoffs on 2,000 labels and test on the other 2,000. Repeat with 20 fresh random splits.
 
 **Counts** if the cascade sends fewer products to the LLM than an embedding-similarity first stage at the same recall-target miss rate. ScaleDoc's workloads would allow a published comparison, but they don't appear to be public; ask the authors.
+
+## Run
+
+```bash
+uv run relevancy show database-semantic-operators                # the steps, and which are paid
+uv run relevancy run database-semantic-operators            # dry run
+uv run relevancy run database-semantic-operators --yes
+```
+
+This runs Part B, the cascades. Part A, SemBench, runs inside SemBench's own repo and environment, so it isn't automated here.
 
 ## Needs
 

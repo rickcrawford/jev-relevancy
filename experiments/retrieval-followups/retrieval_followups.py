@@ -268,6 +268,8 @@ def report():
 
 
 if __name__ == "__main__":
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        raise SystemExit(print(__doc__))
     commands = {"bm25": run_bm25, "onecall": run_onecall, "filters": run_filters, "judged": run_judged,
                 "report": report}
     if len(sys.argv) != 2 or sys.argv[1] not in commands:

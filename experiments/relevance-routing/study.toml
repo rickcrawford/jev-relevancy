@@ -1,7 +1,37 @@
 title = "Query routing by query type"
 premise = "Different query types want different retrieval settings."
-status = "planned"
+status = "ready"
 rank = 10
-keys = ["TYPESAFE_API_KEY"]
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
 base = true
+files = ["data/recall/lists-ann.parquet", "experiments/recall-fusion/results/recall_sweep.csv"]
 decide = "Routed vs recall-fusion's best single setting, held-out nDCG@10 after Voyage, lower bound above zero."
+
+[[steps]]
+name = "slices"
+run = "uv run experiments/relevance-routing/routing.py slices"
+paid = false
+output = "results/slices.txt"
+note = "stop if one retriever wins every slice"
+
+[[steps]]
+name = "classify"
+run = "uv run experiments/relevance-routing/routing.py classify"
+paid = true
+
+[[steps]]
+name = "route"
+run = "uv run experiments/relevance-routing/routing.py route"
+paid = false
+output = "results/route.txt"
+
+[[steps]]
+name = "rerank"
+run = "uv run experiments/relevance-routing/routing.py rerank"
+paid = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/relevance-routing/routing.py report"
+paid = false
+output = "results/report.txt"

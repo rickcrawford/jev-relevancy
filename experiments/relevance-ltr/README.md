@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | ESCI train split (training); the 500 test queries (scoring) | retrieval plus Voyage and Jev for 5,000 train queries and the 500 test queries at depth 100 | turbopuffer, TypeSafe |
+| Written, not run | ESCI train split (training); the 500 test queries (scoring) | retrieval plus Voyage and Jev for 5,000 train queries and the 500 test queries at depth 100 | turbopuffer, TypeSafe |
 
 ## Method
 
@@ -21,6 +21,17 @@ The model against Voyage over the top 100 on the 500 test queries, nDCG@10 and c
 
 ESCI labels about 20 products a query, so training treats most candidates as irrelevant and can learn what Amazon's search returned. Condensed nDCG on the test side shows how much that matters.
 
+## Run
+
+```bash
+uv run relevancy show relevance-ltr                # the steps, and which are paid
+uv run relevancy run relevance-ltr            # dry run
+uv run relevancy run relevance-ltr --yes
+```
+
+Needs the `studies` extra (`uv sync --extra studies`) for LightGBM, and the raw ESCI download for the train split.
+
 ## Needs
 
-`lightgbm`, a train-split loader, and the feature collection above.
+- `uv sync --extra studies` for LightGBM.
+- The raw ESCI files from `uv run relevancy pipeline download`.

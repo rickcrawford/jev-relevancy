@@ -11,6 +11,7 @@ reversed. Then it compares both with the grades step 8 stored.
 """
 
 import csv
+import sys
 from pathlib import Path
 
 from relevancy.judges import grade_pairs
@@ -76,4 +77,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        raise SystemExit(print(__doc__))
     main()

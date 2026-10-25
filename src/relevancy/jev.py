@@ -52,10 +52,40 @@ def grade_products(jev: TypeSafeClient, query: str, products: dict[str, str], ru
         data = resp.model_dump()
         for n, (doc_id, _) in enumerate(chunk):
             ans = data["answers"][f"p{n}"]
-            probs = {int(k): v for k, v in ans["probabilities"].items()}
+            # Probabilities are keyed by level index; the rubric says which grade each level is.
+            probs = {rubric.grades[int(k)]: v for k, v in ans["probabilities"].items()}
             best = max(probs, key=probs.get)
             out[doc_id] = Grade(
-                grade=best, prob=probs[best], expected=ans["score"],
-                latency_ms=latency, cost=None, provider=data.get("model"),
+                grade=best, prob=probs[best], expected=sum(g * p for g, p in probs.items()),
+                latency_ms=latency, cost=None, provider=data.get("model"), probs=probs,
             )
     return out
+
+
+def ask(jev: TypeSafeClient, state: str, questions: dict[str, object], model: str = DEFAULT_MODEL,
+        workers: int = 8) -> dict[str, dict]:
+    """Ask any typed questions (Noul, Choice, Score) about one state, PER_REQUEST to a request.
+
+    Keys of `questions` are yours; they come back as the keys of the answers, each the
+    answer's dict (for Noul and Choice, `probabilities` holds the distribution).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    items = list(questions.items())
+
+    def chunk(start: int) -> dict[str, dict]:
+        part = items[start:start + PER_REQUEST]
+        resp = jev.system_one(state=state, questions={f"q{n}": q for n, (_, q) in enumerate(part)}, model=model)
+        answers = resp.model_dump()["answers"]
+        return {key: answers[f"q{n}"] for n, (key, _) in enumerate(part)}
+
+    out: dict[str, dict] = {}
+    with ThreadPoolExecutor(workers) as pool:
+        for part in pool.map(chunk, range(0, len(items), PER_REQUEST)):
+            out |= part
+    return out
+
+
+def yes_probability(answer: dict) -> float:
+    """P(yes) from a Noul answer, which is a single probability in `noul`."""
+    return float(answer["noul"])

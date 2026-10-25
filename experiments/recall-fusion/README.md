@@ -9,6 +9,7 @@
 `fetch` pulls each list's top 1,000 once: vector search, the main BM25, and title-only BM25. Everything after it is computed locally, so 180 fusion settings cost no more requests than one.
 
 ```bash
+uv run relevancy run recall-fusion --yes          # every step, or:
 uv run experiments/recall-fusion/recall_fusion.py fetch      # resumes by list if it stops
 uv run experiments/recall-fusion/recall_fusion.py check      # local RRF against the stored hybrid run
 uv run experiments/recall-fusion/recall_fusion.py diagnose

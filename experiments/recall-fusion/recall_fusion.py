@@ -29,13 +29,12 @@ rerank. The sweep makes no requests. The test plan and decision rules are in
 README.md, next to this script.
 """
 
+import argparse
 import csv
 import hashlib
-import heapq
 import itertools
 import math
 import re
-import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -44,6 +43,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from relevancy.metrics import paired_delta
+from relevancy.study import fuse
 from relevancy.tpuf import RANK_BY, client, requests_by_query, rerank
 from relevancy.warehouse import read_only
 
@@ -197,19 +197,6 @@ def run_diagnose():
 
 # -- fusion -------------------------------------------------------------------
 
-def fuse(ranked, qid: str, cfg: dict, top: int = 200) -> list[str]:
-    """Weighted RRF: score = sum over lists of weight / (k + rank), rank from 1."""
-    bm25_lists = [n for n in cfg["lists"] if n != "ann"]
-    weights = {n: (1 - cfg["w_ann"]) / len(bm25_lists) for n in bm25_lists}
-    if "ann" in cfg["lists"]:
-        weights["ann"] = cfg["w_ann"]
-    scores: dict[str, float] = defaultdict(float)
-    for n, w in weights.items():
-        for i, d in enumerate(ranked[n].get(qid, [])[:cfg["depth"]]):
-            scores[d] += w / (cfg["k"] + i + 1)
-    return [d for d, _ in heapq.nlargest(top, scores.items(), key=lambda x: (x[1], x[0]))]
-
-
 def gain(g):
     return 2 ** g - 1
 
@@ -349,6 +336,6 @@ def run_rerank():
 
 if __name__ == "__main__":
     commands = {"fetch": run_fetch, "diagnose": run_diagnose, "check": run_check, "sweep": run_sweep, "rerank": run_rerank}
-    if len(sys.argv) != 2 or sys.argv[1] not in commands:
-        raise SystemExit(__doc__)
-    commands[sys.argv[1]]()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("command", choices=commands)
+    commands[ap.parse_args().command]()

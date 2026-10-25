@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | ESCI; NevIR test split; ExcluIR ⚠️ | about 1,000 Jev requests on ESCI | TypeSafe, OpenRouter |
+| Written, not run | ESCI; NevIR test split; ExcluIR ⚠️ | about 1,000 Jev requests on ESCI | TypeSafe, OpenRouter |
 
 In ESCI terms, this is the gap between Exact and Substitute.
 
@@ -21,6 +21,16 @@ Run it over the stored hybrid top 50 with Voyage and with Jev as the base rerank
 - **ESCI:** `voyage+checks` against `voyage`, held-out nDCG@10, lower bound above zero. Break it down by constraint type. Negation queries are reported separately, because [`judge-negation-audit`](../judge-negation-audit/) found the human labels wrong on 74% of disagreements there, so human labels can't score them.
 - **NevIR:** pairwise accuracy on the test split only, with a bootstrap interval, against the published test numbers (GPT-4o 70.1%, RankGPT with o3-mini 77.3%).
 - **ExcluIR:** Recall@1 and MRR against the paper's baselines.
+
+## Run
+
+```bash
+uv run relevancy show relevance-constraints                # the steps, and which are paid
+uv run relevancy run relevance-constraints            # dry run
+uv run relevancy run relevance-constraints --yes
+```
+
+`nevir` needs the `studies` extra (`uv sync --extra studies`). ExcluIR isn't automated: its data is a Google Drive folder with no documented format.
 
 ## Needs
 

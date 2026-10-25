@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned; needs `recall-fusion` first | ESCI | about 10 Jev requests; the rest is offline | TypeSafe |
+| Written, not run | ESCI | about 10 Jev requests and 1,000 Voyage reranks; the rest is offline | TypeSafe, turbopuffer |
 
 Worth doing only after [`recall-fusion`](../recall-fusion/) and [`relevance-constraints`](../relevance-constraints/).
 
@@ -18,6 +18,16 @@ Worth doing only after [`recall-fusion`](../recall-fusion/) and [`relevance-cons
 ## What counts
 
 Routed against `recall-fusion`'s best single setting (not the default), held-out nDCG@10 after Voyage, lower bound above zero.
+
+## Run
+
+```bash
+uv run relevancy show relevance-routing                # the steps, and which are paid
+uv run relevancy run relevance-routing            # dry run
+uv run relevancy run relevance-routing --yes
+```
+
+Run [`recall-fusion`](../recall-fusion/) through `sweep` first; this reads its lists and sweep. If `slices` says one retriever wins every slice, stop there.
 
 ## Needs
 

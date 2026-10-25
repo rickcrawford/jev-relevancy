@@ -2,7 +2,7 @@
 
 > A search evaluation framework. turbopuffer does retrieval and hosted reranking, Jev (TypeSafe's typed grading model) is the judge, and DuckDB keeps every run, result, grade, and latency and computes the metrics in SQL. It calibrates Jev against Amazon's human-labeled ESCI queries, then runs on your own data without labels. Each study in experiments/ tests one premise with a pass mark written before it ran.
 
-Python 3.12 with uv. Keys go in `.env`: `TURBOPUFFER_API_KEY` for search, `TYPESAFE_API_KEY` for Jev, `OPENROUTER_API_KEY` for LLM judges. Studies run through `experiments/run.py`: `list`, `show`, `check`, `base`, `run`, and `status`, each with `--json`. Steps that cost money only run with `--yes`. Agents should follow the run-study skill, which says to confirm paid steps with a person and to judge results against the pass mark as written.
+Python 3.12 with uv. Keys go in `.env`: `TURBOPUFFER_API_KEY` for search, `TYPESAFE_API_KEY` for Jev, `OPENROUTER_API_KEY` for LLM judges. One CLI, `uv run relevancy`, runs everything: the numbered pipeline steps (`pipeline <step>`), the studies (`list`, `show`, `check`, `base`, `run`, `status`, each with `--json`), and the documented numbers (`evidence`). Steps that cost money only run with `--yes`. Agents should follow the run-study skill, which says to confirm paid steps with a person and to judge results against the pass mark as written.
 
 ## Docs
 
@@ -10,7 +10,8 @@ Python 3.12 with uv. Keys go in `.env`: `TURBOPUFFER_API_KEY` for search, `TYPES
 - [AGENTS.md](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/AGENTS.md): how an agent should run, record, or build a study here.
 - [.claude/skills/run-study/SKILL.md](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/.claude/skills/run-study/SKILL.md): the workflow skill: check, confirm cost, run, compare with the pass mark, record the result, build a planned study.
 - [experiments/README.md](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/README.md): the catalog of studies, ranked, with the base every study needs, the rules every study follows, and licences.
-- [experiments/run.py](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/run.py): the runner. It reads each study's `study.toml`.
+- [src/relevancy/cli.py](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/src/relevancy/cli.py): the `relevancy` CLI. It reads each study's `study.toml`.
+- [tests/fakes.py](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/tests/fakes.py): fake turbopuffer, Jev, and LLM clients and a synthetic warehouse; `uv run pytest` runs every study's steps against them.
 - [experiments/TEMPLATE.md](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/TEMPLATE.md): the shape of a new study.
 - [docs/walkthrough.md](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/docs/walkthrough.md): every pipeline step, using your own data, rubrics, and the two ways to call Jev.
 - [docs/results.md](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/docs/results.md): the 500-query ESCI run, judge agreement, turbopuffer performance, costs, and how far to trust them.
@@ -18,19 +19,19 @@ Python 3.12 with uv. Keys go in `.env`: `TURBOPUFFER_API_KEY` for search, `TYPES
 
 ## Studies
 
-- [judge-wands](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/judge-wands/README.md): planned. Jev's agreement with human labels holds on Wayfair's catalogue.
-- [recall-fusion](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/recall-fusion/README.md): ready. Relevant products are retrieved but rank below 50; depth and fusion recover them, and the gain survives reranking.
-- [relevance-ontology](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-ontology/README.md): ready. Matching the query's product category to product categories (both tagged by Jev against the Google taxonomy) improves hybrid search.
-- [relevance-attributes](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-attributes/README.md): planned. A concept stored once per product ('replacement part') fixes the queries that ask for it.
-- [relevance-constraints](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-constraints/README.md): planned. Checking each query constraint with its own yes/no question closes the Exact/Substitute gap.
-- [relevance-reranker-cascade](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-reranker-cascade/README.md): planned. Combining rerankers, or escalating only when unsure, matches Voyage for less.
-- [judge-trec](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/judge-trec/README.md): planned. Jev orders TREC DL systems like NIST's assessors, as well as GPT-4o judges.
-- [database-semantic-operators](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/database-semantic-operators/README.md): planned. Jev makes LLM filters in SQL affordable at table scale.
-- [relevance-ltr](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-ltr/README.md): planned. A trained ranker beats any single reranker, even trained on Jev's labels.
-- [relevance-routing](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-routing/README.md): planned. Different query types want different retrieval settings.
-- [recall-rewrites](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/recall-rewrites/README.md): planned. Rewrites and document expansion close vocabulary gaps.
-- [benchmark-instructions-stark](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/benchmark-instructions-stark/README.md): planned. Per-condition checks let a cheap model follow multi-condition requests.
-- [benchmark-bright](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/benchmark-bright/README.md): planned. As a first pass, Jev keeps most of a reasoning reranker's gain for less.
+- [judge-wands](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/judge-wands/README.md): written, not run. Jev's agreement with human labels holds on Wayfair's catalogue.
+- [recall-fusion](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/recall-fusion/README.md): written, not run. Relevant products are retrieved but rank below 50; depth and fusion recover them, and the gain survives reranking.
+- [relevance-ontology](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-ontology/README.md): written, not run. Matching the query's product category to product categories (both tagged by Jev against the Google taxonomy) improves hybrid search.
+- [relevance-attributes](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-attributes/README.md): written, not run. A concept stored once per product ('replacement part') fixes the queries that ask for it.
+- [relevance-constraints](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-constraints/README.md): written, not run. Checking each query constraint with its own yes/no question closes the Exact/Substitute gap.
+- [relevance-reranker-cascade](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-reranker-cascade/README.md): written, not run. Combining rerankers, or escalating only when unsure, matches Voyage for less.
+- [judge-trec](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/judge-trec/README.md): written, not run. Jev orders TREC DL systems like NIST's assessors, as well as GPT-4o judges.
+- [database-semantic-operators](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/database-semantic-operators/README.md): written, not run. Jev makes LLM filters in SQL affordable at table scale.
+- [relevance-ltr](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-ltr/README.md): written, not run. A trained ranker beats any single reranker, even trained on Jev's labels.
+- [relevance-routing](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/relevance-routing/README.md): written, not run. Different query types want different retrieval settings.
+- [recall-rewrites](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/recall-rewrites/README.md): written, not run. Rewrites and document expansion close vocabulary gaps.
+- [benchmark-instructions-stark](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/benchmark-instructions-stark/README.md): written, not run. Per-condition checks let a cheap model follow multi-condition requests.
+- [benchmark-bright](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/benchmark-bright/README.md): written, not run. As a first pass, Jev keeps most of a reasoning reranker's gain for less.
 - [judge-batch-order](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/judge-batch-order/README.md): done. Product order in a batched Jev request changes the grades.
 - [judge-jev-1.14](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/judge-jev-1.14/README.md): done. Jev 1.14.0 judges and reranks better than 1.13.0.
 - [judge-negation-audit](https://raw.githubusercontent.com/rickcrawford/jev-relevancy/main/experiments/judge-negation-audit/README.md): done. On negation queries, when Jev and the human labels disagree, the humans may be the ones who are wrong.

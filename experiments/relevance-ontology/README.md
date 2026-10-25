@@ -9,6 +9,7 @@
 The brand-filter follow-up gained +0.047 with a perfect brand detector on 81 queries. Categories apply to nearly every query, but they're fuzzier than brands.
 
 ```bash
+uv run relevancy run relevance-ontology --yes          # every step, or:
 uv run experiments/relevance-ontology/ontology_search.py taxonomy
 uv run experiments/relevance-ontology/ontology_search.py tag-docs      # resumable
 uv run experiments/relevance-ontology/ontology_search.py patch
