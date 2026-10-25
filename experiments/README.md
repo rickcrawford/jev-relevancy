@@ -17,6 +17,9 @@ they never change a run or a judgment the docs report.
 | `07_judge_bakeoff.py` (main scripts) | Judge latency | The script prints p50 latency but doesn't store it. The final run's lines are saved in `results/judge_bakeoff_latency.txt`: Jev 110 to 118 ms, the LLMs 435 to 656 ms. |
 | `evidence.py` | The numbers the docs cite | Recomputes all of them; output in `results/evidence.txt`. |
 
+[`directions.md`](directions.md) lists public benchmarks where Jev could be
+tested beyond ESCI, as a judge, a reranker, and a database operator.
+
 The Jev 1.14.0 follow-up ran the main scripts against a copy of the
 warehouse, so the main runs stay as they were:
 
