@@ -142,7 +142,7 @@ long|brand             11   2.2%   0.502             jev 0.615
   esci-us-smoke bm25: 1.28 GB billed per query
   esci-us-smoke bm25-title: 1.28 GB billed per query
   esci-us-smoke hybrid-rrf: 2.56 GB billed per query
-  the 9 runs above: 9 recorded git_sha 5212f86-dirty
+  the 9 runs above: 9 recorded git_sha 35727d9-dirty
   warehouse file: 784 MB
   docs: 482,105 rows
   queries: 8,956 rows

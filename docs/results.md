@@ -4,7 +4,7 @@ What the walkthrough found on ESCI, and how far to trust it. The section numbers
 
 ## What the 500-query run showed
 
-All 482,105 products in the namespace, 500 stratified queries, `aws-us-east-1`, scripts run from a laptop, so wall-clock times include the trip over the public internet. Every reranker reorders the same hybrid top 50. All nine runs recorded commit `5212f86-dirty`: I ran them mid-edit, so the commit is close to, but not exactly, the code that produced them. Each run's `config` column has the parameters that matter.
+All 482,105 products in the namespace, 500 stratified queries, `aws-us-east-1`, scripts run from a laptop, so wall-clock times include the trip over the public internet. Every reranker reorders the same hybrid top 50. All nine runs recorded commit [`35727d9-dirty`](https://github.com/rickcrawford/jev-relevancy/commit/35727d977b6b2afb5a003325b4af2343a5032062): I ran them mid-edit, so the commit is close to, but not exactly, the code that produced them. Each run's `config` column has the parameters that matter.
 
 | Retriever | Reranker | nDCG@10 [95% CI] | vs hybrid [95% CI] | Condensed | vs hybrid, condensed | MRR@10 | Wall p50 ms | turbopuffer server p50 / p99 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
