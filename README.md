@@ -142,4 +142,8 @@ Every run records its config and git commit, so a number in a results table trac
 
 ## Data
 
-ESCI is from Amazon's [Shopping Queries dataset](https://github.com/amazon-science/esci-data) ([Reddy et al., 2022](https://arxiv.org/abs/2206.06588)), Apache-2.0.
+ESCI, and the slice of it in `sample/`, is from Amazon's [Shopping Queries dataset](https://github.com/amazon-science/esci-data) ([Reddy et al., 2022](https://arxiv.org/abs/2206.06588)), Apache-2.0.
+
+## License
+
+The code is MIT, see [LICENSE](LICENSE). The ESCI data keeps its Apache-2.0 license.

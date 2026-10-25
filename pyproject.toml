@@ -2,6 +2,8 @@
 name = "relevancy"
 version = "0.1.0"
 description = "Search evaluation with Jev as the judge. turbopuffer does the retrieval and hosted reranking, and DuckDB keeps every run and computes the metrics in SQL."
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Rick Crawford" }
 ]
