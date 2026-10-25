@@ -29,7 +29,6 @@ The `relevance-` studies:
 - [`relevance-constraints`](relevance-constraints/): specs and negation;
 - [`relevance-reranker-cascade`](relevance-reranker-cascade/): cost against
   quality;
-- [`relevance-multimodal`](relevance-multimodal/): images;
 - [`relevance-ltr`](relevance-ltr/) and [`relevance-routing`](relevance-routing/).
 
 **What does turbopuffer do with my queries?**
@@ -45,7 +44,7 @@ surveys the field.
 
 ## Every study
 
-Ranked by value to a team running search. The ranking is a judgment, not
+Ranked by value to a team running search. Image search is out of scope. The ranking is a judgment, not
 customer data. The top three make one pitch: measure your search without
 labels, find where you lose results, and fix it with attributes you compute
 once.
@@ -59,13 +58,12 @@ once.
 | 4 | [`relevance-constraints`](relevance-constraints/) | Checking each query constraint separately closes the Exact/Substitute gap | Planned | ESCI, NevIR, ExcluIR |
 | 5 | [`relevance-reranker-cascade`](relevance-reranker-cascade/) | Combining rerankers, or escalating only when unsure, gives the same quality for less | Planned | ESCI (stored runs) |
 | 6 | [`database-semantic-operators`](database-semantic-operators/) | Jev makes LLM SQL operators and filter cascades affordable at table scale | Planned | SemBench, ESCI |
-| 7 | [`relevance-multimodal`](relevance-multimodal/) | Images carry signal the text misses, especially in thin listings | Planned | SQID |
-| 8 | [`judge-wands`](judge-wands/) | The ESCI result carries over to another retailer | Planned | WANDS |
-| 9 | [`relevance-ltr`](relevance-ltr/) | A model trained on every signal beats any single reranker, even when trained on Jev's labels | Planned | ESCI train split |
-| 10 | [`relevance-routing`](relevance-routing/) | Different query types want different retrieval settings | Planned | ESCI |
-| 11 | [`recall-rewrites`](recall-rewrites/) | Rewrites and document expansion close vocabulary gaps | Planned, if `recall-fusion` says so | ESCI |
-| 12 | [`benchmark-instructions-stark`](benchmark-instructions-stark/) | Per-condition checks let a cheap model follow multi-condition requests | Planned | STaRK, FollowIR |
-| 13 | [`benchmark-bright`](benchmark-bright/) | As a cheap first pass, Jev keeps most of a reasoning reranker's gain | Planned | BRIGHT |
+| 7 | [`judge-wands`](judge-wands/) | The ESCI result carries over to another retailer | Planned | WANDS |
+| 8 | [`relevance-ltr`](relevance-ltr/) | A model trained on every signal beats any single reranker, even when trained on Jev's labels | Planned | ESCI train split |
+| 9 | [`relevance-routing`](relevance-routing/) | Different query types want different retrieval settings | Planned | ESCI |
+| 10 | [`recall-rewrites`](recall-rewrites/) | Rewrites and document expansion close vocabulary gaps | Planned, if `recall-fusion` says so | ESCI |
+| 11 | [`benchmark-instructions-stark`](benchmark-instructions-stark/) | Per-condition checks let a cheap model follow multi-condition requests | Planned | STaRK, FollowIR |
+| 12 | [`benchmark-bright`](benchmark-bright/) | As a cheap first pass, Jev keeps most of a reasoning reranker's gain | Planned | BRIGHT |
 | — | [`judge-negation-audit`](judge-negation-audit/) | On negation queries, the human labels may be the ones that are wrong | Done: mostly the labels | ESCI |
 | — | [`judge-batch-order`](judge-batch-order/) | Batching products in one Jev request could change grades | Done: no | ESCI |
 | — | [`judge-truncation`](judge-truncation/) | The judge needs more of the description | Done: no | ESCI |
@@ -128,7 +126,6 @@ Each study's README lists the rest under **Needs**.
 | ESCI | Apache-2.0 ✅ |
 | WANDS | MIT ✅ |
 | BRIGHT | CC BY 4.0 ✅ |
-| SQID | MIT for the data. The images are Amazon's, so evaluate on them but don't redistribute them. ⚠️ |
 | TREC DL 2019/2020, LLMJudge | MS MARCO terms: "intended for non-commercial research purposes only". Get a legal review before customer-facing use. ⚠️ |
 | FollowIR | Text from licensed news collections (Robust04, the NYT corpus, the Washington Post) ⚠️ |
 | ExcluIR, SemBench | No licence file in the repo ⚠️ |

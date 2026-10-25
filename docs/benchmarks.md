@@ -4,7 +4,7 @@ The ESCI result shows Jev two ways: as a reranker it ties Voyage, and as a
 judge it agrees with humans more than any LLM tested. The benchmarks below
 would test the same claims on public leaderboards, or test something the
 ESCI setup can't. They're ranked by how well they fit Jev's typed questions
-(`Score`, `Choice`, `Noul`, image input) and how credible a result would be.
+(`Score`, `Choice`, `Noul`) and how credible a result would be.
 
 Compiled in October 2026 from papers and repos found by web search. Every
 benchmark below links to its paper or repo. Baseline numbers come from the
@@ -65,17 +65,17 @@ About 10k pairs.
 [InfoSearch](https://arxiv.org/abs/2410.23841) ·
 [BIRCO](https://arxiv.org/abs/2402.14151)
 
-**4. More product search: WANDS and SQID.**
+**4. More product search: WANDS.**
 - **WANDS** (Wayfair): 480 queries, 43k products, 233k labels in three
   levels (Exact, Partial, Irrelevant). It loads through `02_prepare_custom.py`
   with a 3-level rubric, so the whole ESCI study can be repeated on it.
   Rubrics currently need exactly 4 levels, so this needs a small change to
   `rubric.py`.
-- **SQID** adds product images to ESCI. That tests Jev with image and text
-  together, against text alone, on the same queries as the headline result.
 
-[WANDS](https://github.com/wayfair/WANDS) ·
-[SQID](https://arxiv.org/abs/2405.15190)
+[WANDS](https://github.com/wayfair/WANDS)
+
+Image search (SQID, which adds product images to ESCI) is out of scope for
+this project.
 
 **5. Semi-structured queries: STaRK.** The queries combine text with
 relational constraints ("a sunscreen by a brand that also makes X").

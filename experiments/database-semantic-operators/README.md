@@ -32,8 +32,9 @@ scored on quality (F1 or similar), dollar cost, and latency.
 - Write a Jev runner (SemBench's `GenericRunner` interface) covering the
   filter, classify, and rank operators. For queries with joins and maps,
   either skip them and say so, or pass them to an LLM.
-- Start with the movie reviews and e-commerce scenarios, which are text and
-  images in the form Jev handles best.
+- Run the text queries only: the movie reviews scenario, and the e-commerce
+  scenario's text queries. Image and audio queries are out of scope; leave
+  them out and say so in the submission.
 - **Counts:** similar quality to LOTUS or Palimpzest at clearly lower cost
   and latency. Submit to the leaderboard at sembench.org.
 
