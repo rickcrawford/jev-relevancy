@@ -1,0 +1,101 @@
+jev-relevancy
+Copyright (c) 2026 Rick Crawford
+
+The code in this repository is licensed under the MIT License (see LICENSE).
+This repository also includes data from a third party, listed below under
+its own license. Other datasets the studies use are downloaded at run time
+and not included; they are listed at the end with their terms.
+
+
+================================================================================
+Included third-party material
+================================================================================
+
+Shopping Queries Dataset (ESCI)
+  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+  Licensed under the Apache License, Version 2.0 (see LICENSES/Apache-2.0.txt).
+  Source: https://github.com/amazon-science/esci-data
+  Paper:  Reddy et al., "Shopping Queries Dataset: A Large-Scale ESCI
+          Benchmark for Improving Product Search", 2022.
+          https://arxiv.org/abs/2206.06588
+
+  Files in this repository that contain material from ESCI, and how it was
+  changed:
+
+  sample/queries.csv, sample/docs.parquet, sample/labels.csv
+      8 queries, the 176 products a person graded for them, and those
+      grades. Product descriptions and bullet points are joined into one
+      `body` field and cut to 300 characters. ESCI's E/S/C/I labels are
+      converted to grades 3/2/1/0.
+
+  experiments/judge-negation-audit/results/negation_pairs.csv
+  experiments/judge-negation-audit/results/negation_answers.csv
+      Query text, product titles, and description excerpts for the pairs
+      in the negation audit, and short quotes from them in the rater's
+      answers.
+
+  experiments/*/results/*.csv
+      ESCI query and product identifiers, alongside grades and rankings
+      produced by this project's runs. The judge-truncation results also
+      include ESCI's human labels as grades 3/2/1/0.
+
+  The ESCI dataset itself is downloaded by scripts/01_download_esci.sh and
+  is not included.
+
+
+================================================================================
+Data used at run time but not included
+================================================================================
+
+These are downloaded by the scripts or studies, or by you, into the
+git-ignored data/ directory, and are not redistributed here. Each is
+governed by its own terms. Studies marked [restricted] have terms that may
+limit commercial use; read them before using results in commercial
+material.
+
+  Google Product Taxonomy (studies: relevance-ontology)
+      Google's terms; no open license stated.
+      https://support.google.com/merchants/answer/6324436
+
+  WANDS, Wayfair (judge-wands)
+      MIT License. https://github.com/wayfair/WANDS
+
+  MS MARCO passages and TREC Deep Learning 2019-2023 qrels, LLMJudge
+  (judge-trec) [restricted]
+      Microsoft's MS MARCO terms: "intended for non-commercial research
+      purposes only". https://microsoft.github.io/msmarco/Notice
+      LLMJudge: https://github.com/llm4eval/LLMJudge
+
+  NevIR (relevance-constraints)
+      Code MIT; built on CondaQA (Apache-2.0).
+      https://github.com/orionw/NevIR
+
+  ExcluIR (relevance-constraints) [restricted: no license stated]
+      https://github.com/zwh-sdu/ExcluIR
+
+  SemBench (database-semantic-operators) [restricted: no license stated;
+  each scenario has its own source terms]
+      https://github.com/skddj/sembench
+
+  STaRK (benchmark-instructions-stark)
+      Code MIT; the Amazon knowledge base's terms are not stated.
+      https://github.com/snap-stanford/stark
+
+  FollowIR (benchmark-instructions-stark) [restricted]
+      Test sets drawn from Robust04 (TREC disks, NIST), the New York Times
+      Annotated Corpus (LDC), and the Washington Post collection (TREC).
+      https://github.com/orionw/FollowIR
+
+  BRIGHT (benchmark-bright)
+      CC BY 4.0. https://github.com/xlang-ai/BRIGHT
+
+Licenses were checked in October 2026 and can change; the source is
+authoritative.
+
+
+================================================================================
+Software
+================================================================================
+
+Python dependencies are installed by uv from pyproject.toml and uv.lock and
+are not included in this repository. Each is under its own license.

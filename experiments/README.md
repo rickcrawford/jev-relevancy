@@ -119,7 +119,7 @@ start a new one.
 
 Each study's README lists the rest under **Needs**.
 
-**Licences** (checked October 2026):
+**Licences** (checked October 2026; [`NOTICE`](../NOTICE) has the full list and attributions):
 
 | Dataset | Licence |
 | --- | --- |

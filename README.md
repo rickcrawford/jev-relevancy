@@ -164,4 +164,4 @@ ESCI, and the slice of it in `sample/`, is from Amazon's [Shopping Queries datas
 
 ## License
 
-The code is MIT, see [LICENSE](LICENSE). The ESCI data keeps its Apache-2.0 license.
+The code is MIT, see [LICENSE](LICENSE). The ESCI data keeps its Apache-2.0 license ([text](LICENSES/Apache-2.0.txt)). [NOTICE](NOTICE) lists every file here that contains ESCI material, and the terms of each dataset the studies download.
