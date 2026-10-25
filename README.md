@@ -6,7 +6,7 @@ When someone changes your search (a new embedding model, a reranker, different B
 
 1. **Calibrate on ESCI.** Amazon's [Shopping Queries dataset](https://github.com/amazon-science/esci-data) has shopping queries graded by people. You run several retrievers and rerankers, score them with the human labels, then have Jev grade the same results and see whether it ranks the systems the same way.
 2. **Run it on your own data.** Load your documents and queries, write a rubric that says what "relevant" means for your users, and let Jev grade. Same scripts and tables, no labels needed.
-3. **Pick a test.** Once the base is built, each study in [`experiments/`](experiments/README.md) tests one premise about your search, such as "relevant products are retrieved but ranked too low", with a decision rule fixed in advance.
+3. **Pick a test.** Each study in [`experiments/`](experiments/README.md) tests one premise, such as "relevant products are retrieved but rank too low", with the result that would count written down first.
 
 ```
 your queries ─▶ turbopuffer ─▶ top 50 per query ─▶ reranker (optional) ─▶ results
@@ -107,18 +107,18 @@ uv run scripts/05_score.py --dataset mydocs --judge jev-batched:jev-1.13.0
 
 ## Pick a test
 
-Each study in [`experiments/`](experiments/README.md) starts from a question, tests one premise, and says up front what result would count. Finished ones have their results in the study's folder.
+Once the ESCI base is built (the full load plus steps 4, 6, and 8; [the list](experiments/README.md#build-the-base-first)), each study in [`experiments/`](experiments/README.md) tests one premise and says beforehand what result would count.
 
 | If you want to know | Start with |
 | --- | --- |
-| Whether an automated grader can stand in for human labels | [`judge-wands`](experiments/judge-wands/), [`judge-trec`](experiments/judge-trec/), and four finished robustness checks |
-| Where you lose relevant results before the reranker | [`recall-fusion`](experiments/recall-fusion/) (ready to run) |
-| Whether a change improves relevance | [`relevance-ontology`](experiments/relevance-ontology/) (ready), [`relevance-attributes`](experiments/relevance-attributes/), [`relevance-constraints`](experiments/relevance-constraints/), [`relevance-reranker-cascade`](experiments/relevance-reranker-cascade/), and more |
+| Whether an automated grader can stand in for human labels | [`judge-wands`](experiments/judge-wands/), plus four finished robustness checks |
+| Where you lose relevant products before the reranker | [`recall-fusion`](experiments/recall-fusion/) |
+| Whether a change improves relevance | [`relevance-ontology`](experiments/relevance-ontology/), [`relevance-constraints`](experiments/relevance-constraints/), [`relevance-reranker-cascade`](experiments/relevance-reranker-cascade/), and others in the catalog |
 | What turbopuffer does with your queries | [`turbopuffer-perf`](experiments/turbopuffer-perf/), [`retrieval-followups`](experiments/retrieval-followups/) (both finished) |
-| How Jev does on public benchmarks | [`judge-trec`](experiments/judge-trec/), [`benchmark-instructions-stark`](experiments/benchmark-instructions-stark/), [`benchmark-bright`](experiments/benchmark-bright/) |
-| Whether Jev can power LLM operators in SQL | [`database-semantic-operators`](experiments/database-semantic-operators/) |
+| How Jev does on public benchmarks | [`judge-trec`](experiments/judge-trec/) (non-commercial data), [`benchmark-instructions-stark`](experiments/benchmark-instructions-stark/), [`benchmark-bright`](experiments/benchmark-bright/) |
+| Whether Jev can run LLM filters in SQL | [`database-semantic-operators`](experiments/database-semantic-operators/) |
 
-The [catalog](experiments/README.md) ranks every study by value to a team running search, with its status, dataset, licence, and what it needs. [`TEMPLATE.md`](experiments/TEMPLATE.md) starts a new one.
+The [catalog](experiments/README.md) ranks all of them, with status, dataset, and licence. [`TEMPLATE.md`](experiments/TEMPLATE.md) starts a new one.
 
 ## How it uses tpuf-arrow
 
@@ -156,7 +156,7 @@ docs/           the walkthrough, results, warehouse guide, benchmark survey, and
 data/           downloaded datasets (git-ignored)
 ```
 
-Every run records its config and git commit, so a number in a results table traces back to the code that produced it.
+Every run records its config and git commit, so a number in a results table traces back to the code that produced it. (The headline runs recorded a dirty tree; [docs/results.md](docs/results.md) says which commit.)
 
 ## Data
 

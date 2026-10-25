@@ -1,62 +1,29 @@
 # A second catalogue: WANDS
 
-> **Premise:** The ESCI result carries over to another retailer. On Wayfair's catalogue, with its own categories and labeling process, the retrievers and rerankers rank in a similar order, and Jev agrees with the human labels about as well.
+> **Premise:** Jev's agreement with human labels isn't an ESCI quirk. On Wayfair's catalogue, with its own categories and labeling process, it orders systems the way the humans do about as well as it did on Amazon's.
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned | WANDS (Wayfair, MIT) | A few million embedding tokens; under 5k Jev requests | turbopuffer, TypeSafe |
+| Planned | WANDS (MIT): 480 queries, 42,994 products, 233,448 labels | a few million embedding tokens; a few thousand Jev requests | turbopuffer, TypeSafe |
 
-**Why customers care:** the first question from a prospect who isn't Amazon
-is whether the ESCI result carries over to their catalogue. WANDS answers it
-with a different retailer, category mix, and labeling process.
+This is the first question a prospect who isn't Amazon asks, and WANDS answers it on data anyone can use commercially. It also labels many products per query, so far fewer results go unlabeled than on ESCI.
 
-## Dataset: WANDS (Wayfair)
+## Method
 
-480 queries, 43k furniture and home products, 233k labels in three levels:
-Exact, Partial, Irrelevant. Every query has many labeled products, so far
-fewer results go unlabeled than on ESCI, and nDCG is less biased against
-new retrievers. That makes WANDS a useful check on ESCI's numbers as well.
+1. Load WANDS through `02_prepare_custom.py` with `--sample 380`. Step 7 only draws from queries outside the sample, so this holds 100 queries back for the judge bake-off.
+2. Run steps 3, 4, 6 (Voyage, Cohere, zerank-2, Jev), 7, 8, and 5, as on ESCI.
 
-## Setup
+## What counts
 
-1. **Rubric.** `rubric.py` requires exactly four levels. Either allow 2 to
-   5 levels, so Jev's `Score` uses Wayfair's three, or keep four by mapping
-   Exact to 3, Partial to 2, and Irrelevant to 0, with the 1 level unused.
-   Allowing three levels is cleaner and makes the rubric match the labels.
-   It needs small changes in `rubric.py`, `metrics.py` (gains), and the
-   agreement code.
-2. Convert WANDS's CSVs to `02_prepare_custom.py`'s inputs (docs parquet,
-   queries csv, labels csv) with a small loader script.
-3. Run the full pipeline: steps 03, 04, 06 (Voyage, Cohere, zerank-2, Jev),
-   07, 08, then 05.
+Fixed before the run, against step 8 on ESCI (tau 0.857, interval 0.714 to 1.000; pooled kappa 0.436):
 
-## What to report
+- **Holds** if Jev's tau over the runs is 0.71 or more and its pooled kappa is 0.35 or more.
+- **Fails** if tau is under 0.60 or kappa under 0.30.
+- Anything between is a partial result, reported as such.
 
-- The ESCI results table again for WANDS: retrievers, rerankers, and
-  nDCG@10 with intervals.
-- Judge agreement with Wayfair's labels: exact, κ, and τ over the runs.
-- Whether the reranker order and Jev's place in it match ESCI.
-
-## Decision
-
-This is a replication, not a test with a pass mark. Either outcome is
-useful: matching ESCI strengthens the claim, and a different order is worth
-knowing before a customer finds it.
-
-## Cost
-
-A few million embedding tokens to load (43k products), a few minutes under the default limit. 480 × 4 reranks. Jev
-judging the full label set would be about 4.7k requests; the 200-pair
-bake-off and step 8 cost far less.
-
-## Source
-
-[WANDS](https://github.com/wayfair/WANDS)
+Tau comes first, because it doesn't depend on how many grade levels there are. Kappa across a 3-level and a 4-level scale is only roughly comparable.
 
 ## Needs
 
-- **Data:** `product.csv`, `query.csv`, and `label.csv` from the GitHub repo (MIT): 42,994 products, 480 queries, 233,448 labels. `product.csv` also has `category_hierarchy`, which can check [`relevance-ontology`](../relevance-ontology/) against real categories.
-- **Code:**
-  - `rubric.py` requires exactly 4 levels (`LEVELS = 4`), and WANDS has 3.
-  - `agreement.weighted_kappa` already takes `k`.
-  - A loader that writes `02_prepare_custom.py`'s inputs.
+- `rubric.py` requires exactly 4 levels (`LEVELS = 4`), and WANDS has 3 (Exact, Partial, Irrelevant). `agreement.weighted_kappa` already takes `k`.
+- A loader from WANDS's CSVs to `02_prepare_custom.py`'s inputs. `product.csv` also has a `category_hierarchy`, which can check [`relevance-ontology`](../relevance-ontology/) against real categories.

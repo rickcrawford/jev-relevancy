@@ -1,25 +1,21 @@
 # When Jev disagrees with humans on negation
 
-> **Premise:** When Jev and the human labels disagree on queries with "without", "not", or "no", the humans may be the ones who are wrong: they matched the product type and skipped the negation.
+> **Premise:** when Jev and the human labels disagree on "without", "not", or "no" queries, the humans may be the ones who are wrong. They matched the product type and skipped the negation.
 
-| Status | Dataset | Cost |
-| --- | --- | --- |
-| Done | ESCI, the 500 sampled queries | One blind rater, a Claude model given only the query and the product text |
+| Status | Dataset | Cost | Keys |
+| --- | --- | --- | --- |
+| Done | ESCI, 500 sampled queries | one blind rater | none to report; TypeSafe to rerun step 8 |
 
-## Method
-
-Jev calls a human-Exact product Irrelevant far more often on negation queries than on others. `negation_audit.py export` writes every such disagreement, shuffled and with both grades hidden. A rater answers one question per pair: does the product have the thing the query excludes? `report` joins the answers back.
-
-## Run
+Jev calls a human-Exact product Irrelevant far more often on negation queries than on other queries. `export` writes every such disagreement, shuffled, with both grades hidden. A rater answers one question per pair: does the product have the thing the query excludes? `report` joins the answers back.
 
 ```bash
 uv run experiments/judge-negation-audit/negation_audit.py export
-# a rater fills in results/negation_answers.csv: pair, has_excluded (yes/no/unclear/not_negation)
+# fill in results/negation_answers.csv: pair, has_excluded (yes/no/unclear/not_negation)
 uv run experiments/judge-negation-audit/negation_audit.py report
 ```
 
 ## Result
 
-**Mostly the labels were wrong.** Of 43 disagreements on real negations, the product had the excluded thing in 32 (74%), so Jev was right. Jev was wrong on 4, and 7 were unclear. The regex also catches "forget me not", a flower name; those pairs are flagged and left out of the rates.
+**Mostly the labels.** Of 43 disagreements on real negations, the product had the excluded thing in 32 (74%), so Jev was right. Jev was wrong on 4, and 7 were unclear. Another 5 pairs were "forget me not" (a flower), flagged and left out.
 
-One rater is thin. If you rerun it, add a second and report where they disagree. Files: `results/negation_pairs.csv`, `results/negation_answers.csv`. Follow-up: [`relevance-constraints`](../relevance-constraints/).
+The rater was a Claude model that saw only the query and the product text. One rater is thin; if you rerun this, add a second and report where they disagree. It also means human labels can't score exclusion queries on their own, which matters for [`relevance-constraints`](../relevance-constraints/).

@@ -13,10 +13,9 @@ reversed. Then it compares both with the grades step 8 stored.
 import csv
 from pathlib import Path
 
-import duckdb
-
 from relevancy.judges import grade_pairs
 from relevancy.rubric import load
+from relevancy.warehouse import read_only
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "results"
@@ -32,7 +31,7 @@ def compare(name, stored, pairs, grades):
 
 
 def main() -> None:
-    con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+    con = read_only()
     rows = con.execute(f"""
         WITH picked AS (
             SELECT query_id FROM queries WHERE dataset = 'esci-us' AND sampled

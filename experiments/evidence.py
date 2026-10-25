@@ -18,10 +18,9 @@ import math
 import random
 from pathlib import Path
 
-import duckdb
-
 from relevancy.agreement import kendall_tau, pearson, weighted_kappa
 from relevancy.metrics import GAINS, paired_delta, per_query
+from relevancy.warehouse import read_only
 
 ROOT = Path(__file__).resolve().parents[1]
 EXP = ROOT / "experiments"
@@ -42,7 +41,7 @@ JUDGES = {"jev": "jev-batched:jev-1.13.0", "gemma": "google/gemma-3-27b-it"}
 NEGATION = r"\b(without|not|no|non)\b"
 DRAWS = 1000
 
-con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+con = read_only()
 rng = random.Random(0)
 inv = {v: k for k, v in RUNS.items()}
 

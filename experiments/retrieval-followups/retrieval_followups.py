@@ -25,8 +25,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import duckdb
-
 from relevancy.judges import grade_pairs
 from relevancy.metrics import paired_delta, per_query
 from relevancy.rubric import load
@@ -37,6 +35,7 @@ from relevancy.tpuf import (
     requests_by_query,
     rerank,
 )
+from relevancy.warehouse import read_only
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "results"
@@ -51,7 +50,7 @@ BM25 = {
 
 
 def warehouse():
-    return duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+    return read_only()
 
 
 def sampled(con):
@@ -199,7 +198,14 @@ def report():
                     out[r["query_id"]] = v
         return out
 
-    voyage2 = {q_: m["ndcg10"] for (_, q_), m in per_query(con, DS, ["rerank-3-977611"]).items()
+    # The stored two-request pipeline: the latest Voyage rerank of hybrid on the full namespace.
+    voyage_run = con.execute("""
+        SELECT run_id FROM runs WHERE dataset = ? AND reranker = 'voyage/rerank-3' AND config->>'namespace' = ?
+        ORDER BY started_at DESC LIMIT 1""", [DS, NAMESPACE]).fetchone()
+    if voyage_run is None:
+        raise SystemExit(f"No voyage/rerank-3 run on {NAMESPACE}. Run scripts/06_rerank.py --model voyage/rerank-3 first.")
+    voyage_run = voyage_run[0]
+    voyage2 = {q_: m["ndcg10"] for (_, q_), m in per_query(con, DS, [voyage_run]).items()
                if m["ndcg10"] is not None}
 
     if (OUT / "followup_bm25.csv").exists():
@@ -222,8 +228,8 @@ def report():
         # A reranked run stores latency and server time already summed over both requests.
         stored = con.execute("""
             SELECT quantile_cont(latency_ms, 0.5), quantile_cont(server_ms, 0.5)
-            FROM (SELECT DISTINCT query_id, latency_ms, server_ms FROM results WHERE run_id = 'rerank-3-977611')
-            """).fetchone()
+            FROM (SELECT DISTINCT query_id, latency_ms, server_ms FROM results WHERE run_id = ?)
+            """, [voyage_run]).fetchone()
         print(f"  two requests (stored runs): nDCG@10 {sum(voyage2.values()) / len(voyage2):.3f}, "
               f"wall p50 {stored[0]:.0f} ms, server p50 {stored[1]:.0f} ms (both requests)")
         for v in ("onecall-50", "onecall-100"):

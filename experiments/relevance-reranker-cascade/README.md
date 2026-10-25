@@ -1,52 +1,31 @@
 # Reranker ensemble and cascade
 
-> **Premise:** Two rerankers make different mistakes. Combining them gets more quality for the same cost, and sending only the queries where the cheap one is unsure to the expensive one gets the same quality for less.
+> **Premise:** Voyage and Jev make different mistakes. Combining them gets more quality, and sending a query to the second reranker only when the first is unsure gets the same quality for less.
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned. The ensembles need no new requests | ESCI stored runs | Ensembles free; cascades about 500 requests per reranker | TypeSafe, turbopuffer (cascades only) |
-
-**Why customers care:** teams that already rerank want the same quality for
-less money and latency, or more quality for the same. That's easy to put in
-dollars.
-
-## Dataset: ESCI, mostly from stored runs
-
-The Voyage, Cohere, zerank-2, and Jev reranker runs are already in the
-warehouse, with each product's score for the same hybrid top 50. The
-ensemble costs no requests at all. Only the cascade with 100 candidates
-needs new calls.
+| Planned | ESCI | ensembles: no new requests; cascades: about 500 per reranker | TypeSafe, turbopuffer |
 
 ## Variants
 
-| Variant | How | New requests |
-| --- | --- | --- |
-| Ensemble: mean rank | Average each product's rank under Voyage and Jev | none |
-| Ensemble: score mix | Normalize each reranker's scores per query, then mix with weight w, fixed on the tuning half | none |
-| Ensemble: all four | Mean rank across Voyage, Jev, Cohere, and zerank-2 | none |
-| Cascade A | Voyage over the top 100, then Jev over Voyage's top 20 | 500 Voyage and 500 Jev requests |
-| Cascade B | Jev over the top 100, then Voyage over Jev's top 20 | the same |
-| Cheap first | Jev over the top 50, then Voyage only on queries where Jev isn't confident (its top two products' expected grades are close) | about half the Voyage requests |
+The ensembles reuse the stored reranker scores for the hybrid top 50, so they compare with stored Voyage at top 50. The cascades need new requests at top 100, so they compare with Voyage at top 100, which [`retrieval-followups`](../retrieval-followups/) found worth +0.016 over 50.
 
-"Cheap first" uses something only Jev offers, probabilities, to decide when
-the second reranker is worth paying for. Report the share of queries sent
-on, alongside nDCG.
+| Variant | How | Baseline | Serving cost per query |
+| --- | --- | --- | --- |
+| Mean rank | average of Voyage's and Jev's ranks | Voyage, top 50 | Voyage plus Jev |
+| Score mix | per-query normalized scores, mixed with a weight picked on the tuning half | Voyage, top 50 | Voyage plus Jev |
+| Cascade | Voyage over the top 100, then Jev over Voyage's top 20 | Voyage, top 100 | Voyage plus a small Jev call |
+| Escalate when unsure | Jev over the top 100; Voyage only when Jev's top two expected grades are within a margin picked on the tuning half | Voyage, top 100 | Jev, plus Voyage on some share of queries |
 
-## Metrics and decision
+## What counts
 
-- nDCG@10 against Voyage alone, on the held-out half for anything with a
-  tuned weight.
-- p50 and p99 wall time, and cost per 1,000 queries.
-- Plot quality against cost for every variant. A variant counts if it beats
-  Voyage on quality at similar cost, or matches it within the interval at
-  clearly lower cost.
+Two kinds of win, each fixed in advance:
 
-## Note
+- **Better:** held-out nDCG@10 above Voyage's, lower bound above zero.
+- **Same quality, cheaper:** an equivalence test (TOST) with a margin of ±0.01 nDCG@10, plus a lower serving cost per query. A plain non-significant difference isn't enough, since 250 queries can't rule out much.
 
-The ensemble is run from the `results` table in DuckDB. It's mostly a SQL
-recipe and could go in `docs/warehouse.md` as an example.
+Measure latency the same way for every variant: wall time from one client, each reranker call timed in the same loop. Jev is called directly and Voyage through turbopuffer, so compare the wall time each adds, not server time.
 
 ## Needs
 
-- ✅ Reranked runs store each product's score (`results.score`), so the ensembles are SQL over existing rows.
-- A small script for the cascades.
+A small script for the cascades.

@@ -21,9 +21,8 @@ import json
 import time
 from pathlib import Path
 
-import duckdb
-
 from relevancy.tpuf import client, requests_by_query, search
+from relevancy.warehouse import read_only
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "results"
@@ -35,7 +34,7 @@ FIELDS = ["pass", "retriever", "query_id", "wall_ms", "server_total_ms", "query_
 
 
 def run() -> None:
-    con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+    con = read_only()
     queries = con.execute("SELECT query_id, text FROM queries WHERE dataset = 'esci-us' AND sampled "
                           "ORDER BY query_id").fetchall()
     con.close()

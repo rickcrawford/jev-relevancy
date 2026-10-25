@@ -19,8 +19,10 @@ Variants, each the top 50 for the 500 sampled queries:
                      query's category, fused by RRF: in-category products get
                      extra votes, nothing is dropped
   onto-filter        hybrid limited to the query's category
-  oracle-soft/filter the same, with the category from the query's human-Exact
-                     products: a perfect query tagger, so an upper bound
+  oracle-soft/filter the same, with the category from half of the query's
+                     human-Exact products: a perfect query tagger, so an upper
+                     bound. Scored on labels without that half, so the oracle
+                     can't win by filtering to the products that chose it.
   hybrid+voyage      voyage/rerank-3 over hybrid's top 50
   onto-soft+voyage   voyage/rerank-3 over onto-soft's top 50
 A query the tagger abstains on (no category holds 80%) runs as plain hybrid.
@@ -41,6 +43,7 @@ test plan, and what would count as a win, is in README.md, next to this script.
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import time
@@ -66,6 +69,7 @@ from relevancy.tpuf import (
     requests_by_query,
     rerank,
 )
+from relevancy.warehouse import read_only
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "results"
@@ -175,7 +179,7 @@ def run_tag_docs(args) -> None:
     parts.mkdir(parents=True, exist_ok=True)
     have = client().scan(ns, columns=[]).read_all()
     done = tagged_ids(parts)
-    con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+    con = read_only()
     con.register("have", have)
     todo = [r for r in con.execute(f"""
         SELECT d.doc_id, {SHORT}, {LONG} FROM docs d JOIN have h ON h.id = d.doc_id
@@ -219,7 +223,7 @@ def run_patch(args) -> None:
 
 def run_tag_queries(args) -> None:
     paths, lineage = taxonomy()
-    with duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True) as con:
+    with read_only() as con:
         queries = con.execute("SELECT query_id, text FROM queries WHERE dataset = ? AND sampled ORDER BY query_id",
                               [DS]).fetchall()
     cands = shortlist(client(), [t for _, t in queries])
@@ -249,17 +253,22 @@ def read(name):
         return list(csv.DictReader(f))
 
 
+def oracle_half(qid: str, doc_id: str) -> bool:
+    return int(hashlib.md5(f"{qid}/{doc_id}".encode()).hexdigest(), 16) % 2 == 0
+
+
 def oracle_nodes(scope: str, lineage) -> dict[str, str]:
-    """Per query, the deepest category that 80% of its tagged human-Exact products sit in."""
+    """Per query, the deepest category that 80% of its tagged human-Exact products sit in,
+    using only the oracle half of those products (see oracle_half)."""
     tags = doc_tags(scope, lineage)
-    with duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True) as con:
+    with read_only() as con:
         exact = con.execute("""
             SELECT h.query_id, list(h.doc_id) FROM judgments h JOIN queries q USING (dataset, query_id)
             WHERE q.dataset = ? AND q.sampled AND h.source = 'human' AND h.grade = 3 GROUP BY ALL""",
                             [DS]).fetchall()
     out = {}
     for qid, docs in exact:
-        paths = [tags[d] for d in docs if d in tags]
+        paths = [tags[d] for d in docs if d in tags and oracle_half(qid, d)]
         if not paths:
             continue
         counts = Counter(n for p in paths for n in p)
@@ -281,27 +290,47 @@ def subqueries(variant: str, text: str, node: str) -> list[dict]:
     return hybrid_queries(text, filters=in_category(node))
 
 
+def wait_for_index(tp, ns: str, text: str, minutes: float = 30) -> None:
+    """After the patch, wait until turbopuffer reports no unindexed documents, so every
+    variant runs against the same, fully indexed namespace."""
+    deadline = time.monotonic() + minutes * 60
+    while True:
+        tp.multi_query(ns, hybrid_queries(text, 1), rerank_by=("RRF", {}), limit=1, run_id="index-check")
+        unindexed = tp.log["exhaustive_search_count"].to_pylist()[-1] or 0
+        if unindexed == 0:
+            return
+        if time.monotonic() > deadline:
+            raise SystemExit(f"{ns} still has {unindexed:,} unindexed documents after {minutes} minutes; try again later.")
+        print(f"  waiting for {unindexed:,} unindexed documents", flush=True)
+        time.sleep(60)
+
+
 def run_run(args) -> None:
     _, lineage = taxonomy()
     ns = namespace_name(DS, args.scope)
     predicted = {r["query_id"]: r["node"] for r in read(f"queries-{args.scope}")}
     oracle = oracle_nodes(args.scope, lineage)
     texts = {r["query_id"]: r["text"] for r in read(f"queries-{args.scope}")}
-    tp, rows = client(), []
-    tp.multi_query(ns, hybrid_queries(next(iter(texts.values())), 1), rerank_by=("RRF", {}), limit=1, run_id="warmup")
+    tp = client()
+    wait_for_index(tp, ns, next(iter(texts.values())))
 
-    for variant in ("hybrid", "onto-soft", "onto-filter", "oracle-soft", "oracle-filter"):
-        nodes = oracle if variant.startswith("oracle") else predicted
-        run = []
-        for qid, text in texts.items():
+    # Variants take turns query by query, so cache warmth and index state hit them all alike.
+    variants = ("hybrid", "onto-soft", "onto-filter", "oracle-soft", "oracle-filter")
+    runs = {v: [] for v in variants}
+    for i, (qid, text) in enumerate(texts.items()):
+        for variant in variants[i % len(variants):] + variants[:i % len(variants)]:
+            nodes = oracle if variant.startswith("oracle") else predicted
             node = "" if variant == "hybrid" else nodes.get(qid, "")
             (hits,) = tp.multi_query(ns, subqueries(variant, text, node), rerank_by=("RRF", {}), limit=50,
                                      run_id=f"onto-{variant}", query_id=qid)
-            run.append({"variant": variant, "query_id": qid, "node": node, "ids": " ".join(hits["id"].to_pylist())})
+            runs[variant].append({"variant": variant, "query_id": qid, "node": node,
+                                  "ids": " ".join(hits["id"].to_pylist())})
+    rows = []
+    for variant, run in runs.items():
         logged = requests_by_query(tp, f"onto-{variant}")
         rows += [r | {"wall_ms": round(logged[r["query_id"]]["wall_ms"], 1),
                       "server_ms": logged[r["query_id"]]["server_ms"]} for r in run]
-        print(f"  {variant} done", flush=True)
+    print("  first-stage variants done", flush=True)
 
     # Voyage over each top 50, the way 06_rerank.py does it: a second request.
     for base in ("hybrid", "onto-soft"):
@@ -321,7 +350,7 @@ def run_judge(args) -> None:
     """Jev grades for top-10 products with no human label, so a new retriever
     isn't scored down just for finding products ESCI never labeled."""
     rows = read(f"runs-{args.scope}")
-    with duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True) as con:
+    with read_only() as con:
         labeled = set(con.execute("SELECT query_id, doc_id FROM judgments WHERE dataset = ? AND source = 'human'",
                                   [DS]).fetchall())
         wanted = sorted({(r["query_id"], d) for r in rows for d in r["ids"].split()[:10]} - labeled)
@@ -364,7 +393,7 @@ def q(vals, p):
 
 def run_report(args) -> None:
     _, lineage = taxonomy()
-    con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+    con = read_only()
     human = defaultdict(dict)
     for qid, d, g in con.execute("SELECT query_id, doc_id, grade FROM judgments WHERE dataset = ? AND source = 'human'",
                                  [DS]).fetchall():
@@ -381,6 +410,10 @@ def run_report(args) -> None:
     by_variant = defaultdict(dict)
     for r in rows:
         by_variant[r["variant"]][r["query_id"]] = r
+
+    # The oracle chose its category from half the Exact products; score it on the rest.
+    held_out = {qid: {d: g for d, g in labels.items() if not (g == 3 and oracle_half(qid, d))}
+                for qid, labels in human.items()}
 
     def metric(variant, fn, labels=human, only=None):
         out = {}
@@ -411,8 +444,9 @@ def run_report(args) -> None:
     print("\n## Quality, human labels (filled: Jev grades the top-10 products humans didn't label)")
     print(f"{'variant':<18}{'vs':<15}{'metric':<11}{'value':>7}{'delta [95% CI]':>26}{'n':>5}")
     for a, b in pairs:
+        labels = held_out if a.startswith("oracle") else human
         for name, fn in metrics.items():
-            sa, sb = metric(a, fn), metric(b, fn)
+            sa, sb = metric(a, fn, labels), metric(b, fn, labels)
             m, lo, hi, n = paired_delta(sa, sb)
             print(f"{a:<18}{b:<15}{name:<11}{sum(sa.values()) / len(sa):7.3f}{f'{m:+.3f} [{lo:+.3f}, {hi:+.3f}]':>26}{n:>5}")
         if filled:

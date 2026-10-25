@@ -113,7 +113,7 @@ The ESCI numbers tell you Jev can rank systems. They don't tell you it understan
 
 ## Follow-up experiments
 
-[`experiments/`](../experiments/) has the follow-ups: the negation audit, batch order, description length, Jev 1.14.0, and two that look at turbopuffer itself. [`experiments/README.md`](../experiments/README.md) lists each one with its command and result.
+[`experiments/`](../experiments/) has the follow-ups: the negation audit, batch order, description length, Jev 1.14.0, and two that look at turbopuffer itself. [`experiments/README.md`](../experiments/README.md) lists them, and each study's README has its command and result.
 
 ### What turbopuffer did during the runs
 

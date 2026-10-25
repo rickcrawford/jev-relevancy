@@ -20,7 +20,7 @@ import csv
 import sys
 from pathlib import Path
 
-import duckdb
+from relevancy.warehouse import read_only
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "results"
@@ -44,7 +44,7 @@ def disagreements(con):
 
 
 def main() -> None:
-    con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+    con = read_only()
     rows = disagreements(con)
     OUT.mkdir(parents=True, exist_ok=True)
     if sys.argv[1:] == ["export"]:

@@ -19,6 +19,11 @@ def connect(path: Path | str | None = None) -> duckdb.DuckDBPyConnection:
     return con
 
 
+def read_only() -> duckdb.DuckDBPyConnection:
+    """The same warehouse, opened read-only, for experiments that must not change it."""
+    return duckdb.connect(str(os.environ.get("RELEVANCY_DB", DEFAULT_DB)), read_only=True)
+
+
 def sample_id(con: duckdb.DuckDBPyConnection, dataset: str) -> str:
     """Short fingerprint of the current query sample.
 

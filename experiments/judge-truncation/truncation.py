@@ -11,11 +11,10 @@ characters and once at 4,000, and compares agreement with the humans.
 import csv
 from pathlib import Path
 
-import duckdb
-
 from relevancy.agreement import weighted_kappa
 from relevancy.judges import grade_pairs
 from relevancy.rubric import load
+from relevancy.warehouse import read_only
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "results"
@@ -24,7 +23,7 @@ LENGTHS = [800, 4000]
 
 
 def main() -> None:
-    con = duckdb.connect(str(ROOT / "warehouse" / "relevancy.duckdb"), read_only=True)
+    con = read_only()
     # Human-labeled pairs from step 8's pool: what good systems actually return.
     rows = con.execute(f"""
         WITH picked AS (

@@ -1,75 +1,25 @@
 # Semantic attributes at index time
 
-> **Premise:** Shoppers ask for concepts the catalogue doesn't store, such as "for kids", "replacement part", or "without X". Computing them once per product with Jev and storing them as turbopuffer attributes fixes those queries at normal filter speed, with no model at query time.
+> **Premise:** shoppers ask for concepts the catalogue doesn't store. Labeling each product once with Jev and storing the label as a turbopuffer attribute fixes those queries at normal filter speed, with no model at query time.
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Planned. The category case is ready in [`relevance-ontology`](../relevance-ontology/) | ESCI | About 10k Jev requests per attribute over the full namespace | turbopuffer, TypeSafe |
+| Planned | ESCI | about 10k Jev requests per attribute over 482k products | turbopuffer, TypeSafe |
 
-**Why customers care:** teams want to filter on concepts their data doesn't
-store, such as "for kids", "replacement part", "vegan", or a product
-category. With Jev, the label is computed once per document at indexing,
-stored as a turbopuffer attribute, and then filtered at normal filter speed.
-No model runs at query time.
+Categories are the first case of this, in [`relevance-ontology`](../relevance-ontology/). Query-dependent checks like "without X" or a size can't be computed once per product, so they belong to [`relevance-constraints`](../relevance-constraints/).
 
-The first case is product categories: [`relevance-ontology`](../relevance-ontology/). This study generalizes it to yes/no attributes.
+## Method
 
-## Dataset: ESCI
+1. **One primary attribute**, chosen now: *replacement part* ("is this a replacement part, refill, or accessory for another product, rather than the product itself?"). It's common in ESCI and easy to get wrong. *For kids* is secondary.
+2. Find the queries that ask for it with a pattern list fixed in advance ("replacement", "refill", "spare", "compatible with"). If the sample has fewer than 100, draw more from ESCI's test split for this attribute only.
+3. Ask one `Noul` per product and store the label and its probability. Do this for every product in the namespace, so the filter isn't limited to a pool.
+4. **Check the labels** on a stratified sample: 100 products Jev said yes to and 100 it said no to, rated by a person. That gives precision and a recall estimate even when the attribute is rare. [`database-semantic-operators`](../database-semantic-operators/) labels the same kind of conditions with an LLM; share the labels.
+5. Run `hybrid`, `attr-soft` (hybrid plus filtered subqueries, fused by RRF), and `attr-filter` on the matching queries.
 
-ESCI has enough queries that ask for an attribute to test the idea without a
-new dataset, and the namespace and labels are already there. Find the
-queries in SQL with a fixed list of patterns, chosen before looking at any
-results:
+## What counts
 
-| Attribute | Query pattern (examples) | `Noul` question per product |
-| --- | --- | --- |
-| For kids | "for kids", "toddler", "boys", "girls", "baby" | Is this product made for children? |
-| Replacement part | "replacement", "refill", "spare", "compatible with" | Is this a replacement part or accessory for another product, rather than the product itself? |
-| Without X | "without", "free", "no " | Does this product contain X? (X taken from the query) |
-| Size or quantity | a number with a unit or "pack" | Does this product match {size}? |
-
-Each attribute needs at least 40 sampled queries. If the 500-query sample
-has fewer, draw more from ESCI's test split for that attribute only.
-
-## Steps
-
-1. **Label.** Ask one `Noul` question per product for each attribute, for
-   every product in the namespace: 482k products, 50 per request, so about
-   9.7k requests per attribute. To start cheaper, label only products that
-   appear in some retriever's top 200 for the matching queries. Report that
-   it was done this way, since products outside the pool can't be
-   filtered in.
-2. **Check the labels.** Have a person rate 100 random products per
-   attribute and report precision and recall. If precision is under about
-   0.9, filtering will do more harm than good.
-3. **Store.** Patch each attribute as a boolean, with its probability as a
-   float, the same way `ontology_search.py` patches `category_path`.
-4. **Retrieve.** For each matching query, run three variants:
-   - `hybrid`;
-   - `attr-soft`: hybrid plus the same subqueries filtered to the attribute,
-     fused with RRF;
-   - `attr-filter`: hybrid with the filter only.
-
-## Metrics and decision
-
-nDCG@10 and Recall@50 with human labels, compared with paired intervals,
-per attribute. An attribute is worth shipping if `attr-soft` gains with a
-lower bound above zero. A gain on one attribute is enough to make the case
-for the pattern.
-
-## Cost
-
-About 10k Jev requests per attribute over the full namespace, plus a patch
-for each. Searches are trivial. The human check is about an hour per
-attribute.
-
-## Open question
-
-Asking for the attribute's probability lets the filter threshold change at
-query time, for example `p_kids > 0.7`. If the binary version works, test
-whether thresholds help.
+`attr-soft` against `hybrid` on the primary attribute's queries, nDCG@10. It counts if the lower bound is above zero. With 100 queries, expect to detect only a gain of about 0.04 or more. The secondary attribute is reported with a Bonferroni-corrected interval and doesn't count on its own. If label precision is under 0.9, stop before the retrieval runs.
 
 ## Needs
 
-- Same as `relevance-ontology`: confirm turbopuffer's `patch_columns` and a filter on the patched attribute on the smoke namespace first.
-- About an hour of a person's time per attribute, to check 100 labels.
+The same patch check as `relevance-ontology`, and about two hours of a person's time to rate the labels.
