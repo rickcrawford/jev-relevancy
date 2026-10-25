@@ -1141,7 +1141,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=2.0.0" },
     { name = "pyarrow", specifier = ">=26.0.0" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
-    { name = "tpuf-arrow", git = "https://github.com/rickcrawford/tpuf-arrow?rev=a24f48d2739ae49b98e5ece33b6914062f2432fa" },
+    { name = "tpuf-arrow", git = "https://github.com/rickcrawford/tpuf-arrow?rev=f211dd52bf38a58c34ca2e80c5304b79ea547439" },
     { name = "turbopuffer", specifier = "==2.14.0" },
     { name = "typesafe-sdk", specifier = ">=0.7.5" },
 ]
@@ -1198,7 +1198,7 @@ wheels = [
 [[package]]
 name = "tpuf-arrow"
 version = "0.1.0"
-source = { git = "https://github.com/rickcrawford/tpuf-arrow?rev=a24f48d2739ae49b98e5ece33b6914062f2432fa#a24f48d2739ae49b98e5ece33b6914062f2432fa" }
+source = { git = "https://github.com/rickcrawford/tpuf-arrow?rev=f211dd52bf38a58c34ca2e80c5304b79ea547439#f211dd52bf38a58c34ca2e80c5304b79ea547439" }
 dependencies = [
     { name = "duckdb" },
     { name = "numpy" },

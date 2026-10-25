@@ -32,4 +32,4 @@ dev = [
 ]
 
 [tool.uv.sources]
-tpuf-arrow = { git = "https://github.com/rickcrawford/tpuf-arrow", rev = "a24f48d2739ae49b98e5ece33b6914062f2432fa" }
+tpuf-arrow = { git = "https://github.com/rickcrawford/tpuf-arrow", rev = "f211dd52bf38a58c34ca2e80c5304b79ea547439" }
