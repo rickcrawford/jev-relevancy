@@ -5,7 +5,7 @@ this folder. This script derives each of them again from the data, in
 numbered sections, so a claim like "Jev's gain shrinks on condensed nDCG"
 can be checked against section 1 rather than taken on trust.
 
-  uv run experiments/evidence.py | tee experiments/results/evidence.txt
+  uv run experiments/evidence.py | tee experiments/records/evidence.txt
 
 It reads the warehouse read-only. Bootstrap intervals resample queries
 (or pairs, for the bake-off) 1,000 times with a fixed seed, so reruns
@@ -24,7 +24,8 @@ from relevancy.agreement import kendall_tau, pearson, weighted_kappa
 from relevancy.metrics import GAINS, paired_delta, per_query
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "experiments" / "results"
+EXP = ROOT / "experiments"
+RECORDS = EXP / "records"
 DS = "esci-us"
 RUNS = {
     "hybrid": "hybrid-rrf-full-4cea30",
@@ -300,7 +301,7 @@ for neg, queries, exact, missed in con.execute(f"""
     GROUP BY 1 ORDER BY 1""", [DS, JUDGES["jev"]]).fetchall():
     print(f"  negation={neg!s:<5}  {queries} queries, Jev called {missed} of {exact} human-Exact products "
           f"Irrelevant ({missed / exact:.1%})")
-answers_path = RESULTS / "negation_answers.csv"
+answers_path = EXP / "judge-negation-audit" / "results" / "negation_answers.csv"
 if answers_path.exists():
     counts: dict[str, int] = {}
     for row in csv.DictReader(answers_path.open()):
@@ -313,13 +314,13 @@ if answers_path.exists():
 
 # 12 -----------------------------------------------------------------
 section("12. Batch order and description length (experiments)")
-bo = RESULTS / "batch_order.csv"
+bo = EXP / "judge-batch-order" / "results" / "batch_order.csv"
 if bo.exists():
     rows = list(csv.DictReader(bo.open()))
     same = mean(r["stored_grade"] == r["same_order_grade"] for r in rows)
     rev = mean(r["stored_grade"] == r["reversed_grade"] for r in rows)
     print(f"  batch order, {len(rows):,} pairs: unchanged {same:.1%} regraded as is, {rev:.1%} with products reversed")
-tr = RESULTS / "truncation.csv"
+tr = EXP / "judge-truncation" / "results" / "truncation.csv"
 if tr.exists():
     rows = list(csv.DictReader(tr.open()))
     for col in ("jev_800", "jev_4000"):
@@ -357,7 +358,7 @@ for table in ("docs", "queries", "judgments", "results", "runs"):
     print(f"  {table}: {con.execute(f'SELECT count(*) FROM {table}').fetchone()[0]:,} rows")
 
 # 15 -----------------------------------------------------------------
-section("15. Jev 1.14.0 against 1.13.0 (from experiments/results/jev114_*.csv)")
+section("15. Jev 1.14.0 against 1.13.0 (from experiments/judge-jev-1.14/results/)")
 labels: dict[str, dict[str, int]] = {}
 for q, d, g in con.execute("SELECT query_id, doc_id, grade FROM judgments WHERE dataset = ? AND source = 'human'",
                            [DS]).fetchall():
@@ -375,7 +376,7 @@ def ndcg_from(ranked: dict[str, list[str]]) -> dict[str, float]:
     return out
 
 
-rerank_path, judge_path = RESULTS / "jev114_rerank.csv", RESULTS / "jev114_judge.csv"
+rerank_path, judge_path = EXP / "judge-jev-1.14" / "results" / "jev114_rerank.csv", EXP / "judge-jev-1.14" / "results" / "jev114_judge.csv"
 if rerank_path.exists():
     ranked: dict[str, list[tuple[int, str]]] = {}
     for row in csv.DictReader(rerank_path.open()):
@@ -441,7 +442,7 @@ per_q = [n for (n,) in con.execute("""
     WHERE j.dataset = ? AND j.source = 'human' AND q.sampled GROUP BY j.query_id""", [DS]).fetchall()]
 print(f"  human grades per sampled query: mean {mean(per_q):.1f}, median {sorted(per_q)[len(per_q) // 2]}, n={len(per_q)}")
 # The first full load logged turbopuffer's own token count before it stopped.
-last = [line for line in (RESULTS / "full_load_first_attempt.txt").read_text().splitlines() if "batches" in line][-1]
+last = [line for line in (RECORDS / "full_load_first_attempt.txt").read_text().splitlines() if "batches" in line][-1]
 parts = last.replace(",", "").split()
 rows_done, tokens_m, minutes = int(parts[2]), float(parts[4].rstrip("M")), float(parts[6])
 (chars_done,) = con.execute("""

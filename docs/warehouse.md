@@ -119,7 +119,7 @@ GROUP BY ALL;
 
 On 138 human-Exact products from 27 negation queries, Jev said Irrelevant 31.2% of the time, against 6.6% of 2,121 on the other 409 queries (§11).
 
-So who's wrong? [`experiments/negation_audit.py`](../experiments/negation_audit.py) exports every one of those disagreements with both grades hidden, for a third rater to answer one question: does the product have the thing the query excludes? I had a Claude model do the rating, given only the query and the product text. Of the 43 pairs on real negations, the product had the excluded thing in 32 (74%), so the human label was wrong and Jev was right. Jev was wrong on 4, and on 7 the product text didn't say (§11). My guess is that ESCI's graders matched on the product type and skipped the "without". That's worth knowing before you trust any human labels on negation queries, and it's the kind of slice I'd watch on my own data.
+So who's wrong? [`experiments/judge-negation-audit/negation_audit.py`](../experiments/judge-negation-audit/negation_audit.py) exports every one of those disagreements with both grades hidden, for a third rater to answer one question: does the product have the thing the query excludes? I had a Claude model do the rating, given only the query and the product text. Of the 43 pairs on real negations, the product had the excluded thing in 32 (74%), so the human label was wrong and Jev was right. Jev was wrong on 4, and on 7 the product text didn't say (§11). My guess is that ESCI's graders matched on the product type and skipped the "without". That's worth knowing before you trust any human labels on negation queries, and it's the kind of slice I'd watch on my own data.
 
 **How Jev's grades line up with the humans' (a confusion matrix).**
 

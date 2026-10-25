@@ -1,6 +1,6 @@
 # Results
 
-What the walkthrough found on ESCI, and how far to trust it. The section numbers (§) point to the matching part of [`experiments/results/evidence.txt`](../experiments/results/evidence.txt), which [`experiments/evidence.py`](../experiments/evidence.py) recomputes from the warehouse.
+What the walkthrough found on ESCI, and how far to trust it. The section numbers (§) point to the matching part of [`experiments/records/evidence.txt`](../experiments/records/evidence.txt), which [`experiments/evidence.py`](../experiments/evidence.py) recomputes from the warehouse.
 
 ## What the 500-query run showed
 
@@ -34,7 +34,7 @@ What I take from it:
 
 ### Judges against humans (step 7)
 
-200 held-out pairs, 50 per grade. Brackets are 95% bootstrap intervals over pairs (§6). Latency and cost are from step 7's printout on my run; the warehouse doesn't store them, so the latency lines are saved in [`experiments/results/judge_bakeoff_latency.txt`](../experiments/results/judge_bakeoff_latency.txt).
+200 held-out pairs, 50 per grade. Brackets are 95% bootstrap intervals over pairs (§6). Latency and cost are from step 7's printout on my run; the warehouse doesn't store them, so the latency lines are saved in [`experiments/records/judge_bakeoff_latency.txt`](../experiments/records/judge_bakeoff_latency.txt).
 
 | Judge | Exact [95% CI] | Within 1 | Weighted kappa [95% CI] | r(expected, human) | p50 ms | Cost |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -85,7 +85,7 @@ Tau intervals resample the 500 queries; agreement intervals resample queries too
 
 A tau of 0.857 across 8 runs means 26 of the 28 pairs of runs come out in the same order as with the human labels. For Jev, the two pairs that flipped are Cohere against Gemma, which the humans have 0.001 apart, and Voyage against zerank-2. That second one is a real miss: the humans put Voyage ahead by 0.022 (paired CI 0.012 to 0.031, §2), and Jev has zerank-2 ahead by 0.004. The decisions with big gaps all match: reranked beats not reranked, hybrid beats vector alone, vector beats BM25. Only 9 of the 28 pairs are within 0.03 of each other on human nDCG (§7), and those are where every flip happens. So I'd trust a Jev verdict between setups that differ by a lot, and want human labels before acting on a difference of 0.02.
 
-**Jev 1.14.0 is the better judge.** Graded against the same pool, it agrees with the humans on 0.031 more of the labeled pairs than 1.13.0 (interval +0.019 to +0.045), and its kappa is 0.471 against 0.436 (§15). Its tau is the same (from a step 8 run on a copy of the warehouse, logged in [`experiments/README.md`](../experiments/README.md)), and as a reranker it's level with 1.13.0 (-0.001, interval -0.007 to +0.004). The two versions give the same grade on 87.8% of pairs. If you're starting fresh, use 1.14.0 as the judge; I kept 1.13.0 for the main runs to match what turbopuffer hosts.
+**Jev 1.14.0 is the better judge.** Graded against the same pool, it agrees with the humans on 0.031 more of the labeled pairs than 1.13.0 (interval +0.019 to +0.045), and its kappa is 0.471 against 0.436 (§15). Its tau is the same (from a step 8 run on a copy of the warehouse, logged in [`experiments/judge-jev-1.14/README.md`](../experiments/judge-jev-1.14/README.md)), and as a reranker it's level with 1.13.0 (-0.001, interval -0.007 to +0.004). The two versions give the same grade on 87.8% of pairs. If you're starting fresh, use 1.14.0 as the judge; I kept 1.13.0 for the main runs to match what turbopuffer hosts.
 
 Single-grade agreement is higher here than in step 7 (0.60 against 0.52 for Jev), and it isn't because the pool is mostly Exact products. Reweighting the pool to an even mix of grades still gives 0.572 (§8). The difference is which products of each grade show up. On human-Exact products, Jev agrees 66% of the time in the pool but 36% in the bake-off. The Exacts a good search system returns are the obvious ones, while the bake-off draws Exacts at random, including the borderline cases.
 
@@ -93,7 +93,7 @@ Gemma ties Jev on standard nDCG and has a higher tau on condensed nDCG (0.929 ag
 
 ## How much to trust these numbers
 
-`uv run experiments/evidence.py` recomputes every figure above from the warehouse and writes [`experiments/results/evidence.txt`](../experiments/results/evidence.txt). It's read-only and takes a few seconds. Here's what it says about the limits:
+`uv run experiments/evidence.py` recomputes every figure above from the warehouse and writes [`experiments/records/evidence.txt`](../experiments/records/evidence.txt). It's read-only and takes a few seconds. Here's what it says about the limits:
 
 - **500 queries can separate rerankers about 0.012 to 0.019 apart** on standard nDCG@10 (80% power, §5). Voyage against Jev (0.011) is below that, which is why I call it a tie.
 - **Many comparisons, a few false alarms.** I compared 36 pairs of runs. 30 are significant at p < 0.05, and 26 survive a Bonferroni correction (§4). The four that drop out are two close reranker pairs (Jev against Gemma and against Cohere), BM25 title-only against title and body, and hybrid against vector. I've avoided naming a winner on the reranker pairs.
@@ -117,7 +117,7 @@ The ESCI numbers tell you Jev can rank systems. They don't tell you it understan
 
 ### What turbopuffer did during the runs
 
-[`experiments/turbopuffer_perf.py`](../experiments/turbopuffer_perf.py) reran the three first-stage retrievers twice and saved every field turbopuffer returns ([`turbopuffer_perf.txt`](../experiments/results/turbopuffer_perf.txt)). [`experiments/retrieval_followups.py`](../experiments/retrieval_followups.py) tried BM25 field variants, hybrid and reranking in one request, a brand filter, and Elastic's judged-only setup ([`retrieval_followups.txt`](../experiments/results/retrieval_followups.txt)). Every query ran one at a time from my laptop against `aws-us-east-1`, so none of this says anything about throughput under concurrency.
+[`experiments/turbopuffer-perf/turbopuffer_perf.py`](../experiments/turbopuffer-perf/turbopuffer_perf.py) reran the three first-stage retrievers twice and saved every field turbopuffer returns ([`turbopuffer_perf.txt`](../experiments/turbopuffer-perf/results/turbopuffer_perf.txt)). [`experiments/retrieval-followups/retrieval_followups.py`](../experiments/retrieval-followups/retrieval_followups.py) tried BM25 field variants, hybrid and reranking in one request, a brand filter, and Elastic's judged-only setup ([`retrieval_followups.txt`](../experiments/retrieval-followups/results/retrieval_followups.txt)). Every query ran one at a time from my laptop against `aws-us-east-1`, so none of this says anything about throughput under concurrency.
 
 **Most of the wall time was network.** The laptop's round trip was a median of about 54 ms (§1), and turbopuffer's server time was 76 ms for ANN, 102 ms for BM25, and 103 ms for hybrid at p50. Of ANN's 76 ms, 66 ms was embedding the query text. Hybrid's server time is about BM25's alone, not the sum of the two.
 

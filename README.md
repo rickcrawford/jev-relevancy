@@ -2,10 +2,11 @@
 
 A search evaluation framework with [Jev](https://docs.typesafe.ai/introduction) as the judge. [turbopuffer](https://turbopuffer.com) does the retrieval and the hosted reranking. [DuckDB](https://duckdb.org) keeps every run, result, grade, and latency in one file and computes the metrics in SQL. The scripts talk to turbopuffer through [tpuf-arrow](https://github.com/rickcrawford/tpuf-arrow), which returns hits as Arrow tables DuckDB can query.
 
-When someone changes your search (a new embedding model, a reranker, different BM25 weights), the question is whether results got better, and the usual answer is a handful of spot checks. Human labels would settle it, but most teams don't have them for their own data, and labeling a few thousand results takes weeks. Jev is TypeSafe's grading model: you ask it a typed question, like "how well does this result match the query, on this 4-level scale?", and in about 100 ms it returns a probability for each level, for a small fraction of a cent. A cheap judge is only useful if you know how far to trust it, so this repo has two parts:
+When someone changes your search (a new embedding model, a reranker, different BM25 weights), the question is whether results got better, and the usual answer is a handful of spot checks. Human labels would settle it, but most teams don't have them for their own data, and labeling a few thousand results takes weeks. Jev is TypeSafe's grading model: you ask it a typed question, like "how well does this result match the query, on this 4-level scale?", and in about 100 ms it returns a probability for each level, for a small fraction of a cent. A cheap judge is only useful if you know how far to trust it, so this repo has three parts:
 
 1. **Calibrate on ESCI.** Amazon's [Shopping Queries dataset](https://github.com/amazon-science/esci-data) has shopping queries graded by people. You run several retrievers and rerankers, score them with the human labels, then have Jev grade the same results and see whether it ranks the systems the same way.
 2. **Run it on your own data.** Load your documents and queries, write a rubric that says what "relevant" means for your users, and let Jev grade. Same scripts and tables, no labels needed.
+3. **Pick a test.** Once the base is built, each study in [`experiments/`](experiments/README.md) tests one premise about your search, such as "relevant products are retrieved but ranked too low", with a decision rule fixed in advance.
 
 ```
 your queries ─▶ turbopuffer ─▶ top 50 per query ─▶ reranker (optional) ─▶ results
@@ -104,6 +105,21 @@ uv run scripts/08_judge_runs.py --dataset mydocs --judge jev-batched:jev-1.13.0
 uv run scripts/05_score.py --dataset mydocs --judge jev-batched:jev-1.13.0
 ```
 
+## Pick a test
+
+Each study in [`experiments/`](experiments/README.md) starts from a question, tests one premise, and says up front what result would count. Finished ones have their results in the study's folder.
+
+| If you want to know | Start with |
+| --- | --- |
+| Whether an automated grader can stand in for human labels | [`judge-wands`](experiments/judge-wands/), [`judge-trec`](experiments/judge-trec/), and four finished robustness checks |
+| Where you lose relevant results before the reranker | [`recall-fusion`](experiments/recall-fusion/) (ready to run) |
+| Whether a change improves relevance | [`relevance-ontology`](experiments/relevance-ontology/) (ready), [`relevance-attributes`](experiments/relevance-attributes/), [`relevance-constraints`](experiments/relevance-constraints/), [`relevance-reranker-cascade`](experiments/relevance-reranker-cascade/), and more |
+| What turbopuffer does with your queries | [`turbopuffer-perf`](experiments/turbopuffer-perf/), [`retrieval-followups`](experiments/retrieval-followups/) (both finished) |
+| How Jev does on public benchmarks | [`judge-trec`](experiments/judge-trec/), [`benchmark-instructions-stark`](experiments/benchmark-instructions-stark/), [`benchmark-bright`](experiments/benchmark-bright/) |
+| Whether Jev can power LLM operators in SQL | [`database-semantic-operators`](experiments/database-semantic-operators/) |
+
+The [catalog](experiments/README.md) ranks every study by value to a team running search, with its status, dataset, licence, and what it needs. [`TEMPLATE.md`](experiments/TEMPLATE.md) starts a new one.
+
 ## How it uses tpuf-arrow
 
 The scripts double as an example of tpuf-arrow. Most of the calls are in [`src/relevancy/tpuf.py`](src/relevancy/tpuf.py).
@@ -123,19 +139,20 @@ The scripts double as an example of tpuf-arrow. Most of the calls are in [`src/r
 - [Walkthrough](docs/walkthrough.md): every step, your own data, rubrics, and the two ways to call Jev
 - [Results](docs/results.md): the 500-query run, judge agreement, turbopuffer performance, and costs
 - [Querying the warehouse](docs/warehouse.md): the tables, things to know, and SQL recipes
-- [Experiments](experiments/README.md): follow-ups on negation, batching, description length, and turbopuffer
+- [Pick a test](experiments/README.md): every study, ranked, with its premise, status, and what it needs
+- [Public benchmarks](docs/benchmarks.md): where else Jev could be tested, as a judge, a reranker, and a database operator
 - [Connector design](docs/duckdb-turbopuffer-connector.md): the design that became tpuf-arrow
 
 ## Layout
 
 ```
 scripts/        the walkthrough, one numbered step per file
-experiments/    follow-up experiments and evidence.py, which recomputes every number
+experiments/    one folder per study (README, script, results), plus evidence.py, which recomputes every number
 src/relevancy/  shared code: warehouse, turbopuffer queries, judges, metrics
 rubrics/        what "relevant" means, one TOML file per rubric
 sample/         176 ESCI products, 8 queries, and their grades, for a quick try
 warehouse/      schema.sql (checked in) and relevancy.duckdb (built by the scripts)
-docs/           the walkthrough, results, warehouse guide, and connector design
+docs/           the walkthrough, results, warehouse guide, benchmark survey, and connector design
 data/           downloaded datasets (git-ignored)
 ```
 

@@ -1,41 +1,149 @@
-# Follow-up experiments
+# Pick a test
 
-Each script here tests one thing the main walkthrough raised. They read the
-warehouse read-only and write their results to `experiments/results/`, so
-they never change a run or a judgment the docs report.
+The walkthrough in `scripts/` builds the base: a dataset in the warehouse,
+documents in turbopuffer, first-stage runs, rerankers, and judges. Every
+study here starts from that base, tests one premise, and says up front what
+result would count. Start from the question you have.
 
-| Script | What it tests | Result |
-| --- | --- | --- |
-| `negation_audit.py` | Whether Jev or the human labels are wrong on "without" and "not" queries | Mostly the labels. Of 43 disagreements on real negations, the product had the excluded thing in 32, Jev was wrong on 4, and 7 were unclear. |
-| `batch_order.py` | Whether the order of products in a batched Jev request changes its grades | No. Regrading 3,177 pairs matched the stored grade 97.7% of the time in the same order and 97.3% reversed. |
-| `truncation.py` | Whether showing the judge more of the product description changes agreement with humans | No. 800 characters: exact 0.600, kappa 0.410. 4,000 characters: 0.606 and 0.406, on 1,091 pairs. |
-| Jev 1.14.0 (main scripts) | The newer Jev as a reranker and as a judge | Same reranker (-0.001 nDCG@10, interval -0.007 to +0.004). Better judge: +0.031 exact agreement on the same 3,692 pairs (interval +0.019 to +0.045), kappa 0.471 against 0.436, same tau. |
-| `turbopuffer_perf.py` | Where turbopuffer's server time goes, cache temperature, result stability, and ANN recall | Of ANN's 76 ms median server time, 66 ms is embedding the query text. BM25 and hybrid run about 103 ms at p50 and 320 ms at p99. Every query reported a hot cache, and repeating the 500 queries gave the same top 10 for 100% of BM25 queries and 99.4% of ANN and hybrid queries. ANN recall against exhaustive search is 0.994 at 50 and 0.995 at 10 (100 vectors sampled from the namespace). 9,785 documents (2%) were still unindexed and scanned exhaustively on every query. |
-| `retrieval_followups.py` | BM25 field variants, hybrid and reranking in one request, a brand filter, and Elastic's judged-only setup | Title-only BM25: 17 ms p50, 43 ms p99, nDCG@10 +0.020. One request with `rerank_by` on `multi_query`: 362 to 308 ms wall, +0.006 nDCG@10 (+0.016 with 100 per subquery). Brand filter on 81 queries: 79 to 77 ms, +0.047 (an upper bound). Judged products only: Jev 0.868, Voyage 0.848, product-id order 0.679. Output in `results/retrieval_followups.txt`. |
-| `ontology_search.py` | Whether tagging products and queries against the Google Product Taxonomy (vector search shortlist, Jev `Choice` picks) and boosting or filtering on the query's category improves hybrid search, before and after Voyage | Proposed, not run. Test plan and decision rules in [`ontology_search.md`](ontology_search.md). |
-| `recall_fusion.py` | Where first-stage search loses Exact and Substitute products (ranked too low, or never found), and how much fusion settings and deeper candidates get back, before and after Voyage. Fuses stored top-1,000 lists offline. | Proposed, not run. Test plan and decision rules in [`recall_fusion.md`](recall_fusion.md). |
-| `07_judge_bakeoff.py` (main scripts) | Judge latency | The script prints p50 latency but doesn't store it. The final run's lines are saved in `results/judge_bakeoff_latency.txt`: Jev 110 to 118 ms, the LLMs 435 to 656 ms. |
-| `evidence.py` | The numbers the docs cite | Recomputes all of them; output in `results/evidence.txt`. |
+## Start from your question
 
-[`directions.md`](directions.md) lists public benchmarks where Jev could be
-tested beyond ESCI, as a judge, a reranker, and a database operator.
-[`plans/`](plans/README.md) has a plan for each follow-up, ranked by value
-to customers, with the dataset each uses.
+**Can I trust an automated grader for my search?**
+Go to the `judge-` studies.
+- Start with [`judge-wands`](judge-wands/) to see whether Jev's ESCI result
+  holds on a second catalogue.
+- [`judge-trec`](judge-trec/) for the public proof.
+- The finished robustness checks: [`judge-negation-audit`](judge-negation-audit/),
+  [`judge-batch-order`](judge-batch-order/), [`judge-truncation`](judge-truncation/),
+  and [`judge-jev-1.14`](judge-jev-1.14/).
 
-The Jev 1.14.0 follow-up ran the main scripts against a copy of the
-warehouse, so the main runs stay as they were:
+**Am I losing relevant results before the reranker sees them?**
+Start with [`recall-fusion`](recall-fusion/). Its diagnosis says whether the
+misses are ranked too low, which fusion fixes cheaply, or never found, in
+which case go on to [`recall-rewrites`](recall-rewrites/).
 
-```bash
-cp warehouse/relevancy.duckdb /tmp/jev114.duckdb
-export RELEVANCY_DB=/tmp/jev114.duckdb
-uv run scripts/08_judge_runs.py --judge jev-batched:jev-1.13.0 --judge jev-batched:jev-1.14.0 --judge google/gemma-3-27b-it
-uv run scripts/06_rerank.py --model jev:jev-1.14.0
-uv run scripts/05_score.py --base jev-1.13.0-b53bce
+**Will this change improve relevance?**
+The `relevance-` studies:
+- [`relevance-ontology`](relevance-ontology/) and
+  [`relevance-attributes`](relevance-attributes/): labels computed at index
+  time;
+- [`relevance-constraints`](relevance-constraints/): specs and negation;
+- [`relevance-reranker-cascade`](relevance-reranker-cascade/): cost against
+  quality;
+- [`relevance-multimodal`](relevance-multimodal/): images;
+- [`relevance-ltr`](relevance-ltr/) and [`relevance-routing`](relevance-routing/).
+
+**What does turbopuffer do with my queries?**
+[`turbopuffer-perf`](turbopuffer-perf/) and [`retrieval-followups`](retrieval-followups/), both finished.
+
+**How does Jev compare on public benchmarks?**
+[`judge-trec`](judge-trec/), [`benchmark-instructions-stark`](benchmark-instructions-stark/),
+and [`benchmark-bright`](benchmark-bright/). [`docs/benchmarks.md`](../docs/benchmarks.md)
+surveys the field.
+
+**Can Jev power LLM operators in SQL?**
+[`database-semantic-operators`](database-semantic-operators/).
+
+## Every study
+
+Ranked by value to a team running search. The ranking is a judgment, not
+customer data. The top three make one pitch: measure your search without
+labels, find where you lose results, and fix it with attributes you compute
+once.
+
+| Rank | Study | Premise | Status | Dataset |
+| --- | --- | --- | --- | --- |
+| 1 | [`judge-trec`](judge-trec/) | Jev orders search systems like human assessors, as well as GPT-4o-class judges, for far less | Planned | TREC DL, LLMJudge ⚠️ licence |
+| 2 | [`recall-fusion`](recall-fusion/) | Relevant products are retrieved but ranked below 50; fusion and depth recover them | **Ready** | ESCI |
+| 3 | [`relevance-ontology`](relevance-ontology/) | Matching the query's category to products' categories improves hybrid search | **Ready** | ESCI + Google taxonomy |
+| 3 | [`relevance-attributes`](relevance-attributes/) | Concepts computed once per product ("for kids") fix queries that ask for them | Planned | ESCI |
+| 4 | [`relevance-constraints`](relevance-constraints/) | Checking each query constraint separately closes the Exact/Substitute gap | Planned | ESCI, NevIR, ExcluIR |
+| 5 | [`relevance-reranker-cascade`](relevance-reranker-cascade/) | Combining rerankers, or escalating only when unsure, gives the same quality for less | Planned | ESCI (stored runs) |
+| 6 | [`database-semantic-operators`](database-semantic-operators/) | Jev makes LLM SQL operators and filter cascades affordable at table scale | Planned | SemBench, ESCI |
+| 7 | [`relevance-multimodal`](relevance-multimodal/) | Images carry signal the text misses, especially in thin listings | Planned | SQID |
+| 8 | [`judge-wands`](judge-wands/) | The ESCI result carries over to another retailer | Planned | WANDS |
+| 9 | [`relevance-ltr`](relevance-ltr/) | A model trained on every signal beats any single reranker, even when trained on Jev's labels | Planned | ESCI train split |
+| 10 | [`relevance-routing`](relevance-routing/) | Different query types want different retrieval settings | Planned | ESCI |
+| 11 | [`recall-rewrites`](recall-rewrites/) | Rewrites and document expansion close vocabulary gaps | Planned, if `recall-fusion` says so | ESCI |
+| 12 | [`benchmark-instructions-stark`](benchmark-instructions-stark/) | Per-condition checks let a cheap model follow multi-condition requests | Planned | STaRK, FollowIR |
+| 13 | [`benchmark-bright`](benchmark-bright/) | As a cheap first pass, Jev keeps most of a reasoning reranker's gain | Planned | BRIGHT |
+| — | [`judge-negation-audit`](judge-negation-audit/) | On negation queries, the human labels may be the ones that are wrong | Done: mostly the labels | ESCI |
+| — | [`judge-batch-order`](judge-batch-order/) | Batching products in one Jev request could change grades | Done: no | ESCI |
+| — | [`judge-truncation`](judge-truncation/) | The judge needs more of the description | Done: no | ESCI |
+| — | [`judge-jev-1.14`](judge-jev-1.14/) | Jev 1.14.0 is a better judge and reranker | Done: better judge, same reranker | ESCI |
+| — | [`turbopuffer-perf`](turbopuffer-perf/) | Know where server time goes and what ANN gives up | Done | ESCI |
+| — | [`retrieval-followups`](retrieval-followups/) | Four small retrieval changes each move quality or latency | Done | ESCI |
+
+**Status:** *Planned* means the README is a test plan. *Ready* means the
+script is written and checked offline, but hasn't run against
+turbopuffer or Jev. *Done* means the result is in the study's README and
+`results/`. If you have to choose, run `recall-fusion` and
+`relevance-reranker-cascade` first: they need nothing new, cost little, and
+decide whether `recall-rewrites` and `relevance-routing` are worth doing.
+
+## What a study looks like
+
+```
+experiments/<group>-<name>/
+  README.md     premise, status, method, how to run, how to decide, what it needs
+  *.py          the script, if it has one
+  results/      what it wrote: small CSVs and text, committed
 ```
 
-Its grades and reranked results are saved in `results/jev114_judge.csv` and
-`results/jev114_rerank.csv`, which `evidence.py` reads for section 15.
+Large intermediate files (ranked lists, tags for every product) go to
+`data/<name>/`, which is git-ignored. Copy [`TEMPLATE.md`](TEMPLATE.md) to
+start a new one.
 
-The negation audit was rated by a Claude model that saw only the query and
-the product text, never either grade. One rater is thin; if you rerun it,
-add a second and report where they disagree.
+## Rules every study follows
+
+- **Fix the settings before looking at results.** A study that picks among
+  options (thresholds, weights, prompts) picks on half the queries, split by
+  a hash of the query id, and reports the other half.
+- **Compare with paired bootstrap intervals** (`relevancy.metrics.paired_delta`)
+  on the same queries. A gain counts when the interval's lower bound is
+  above zero.
+- **Account for unlabeled results.** A retriever that finds products the
+  labels never covered is scored down for it. Report condensed nDCG@10, and
+  Jev-filled nDCG@10 where it matters. Keep human labels as the primary
+  metric whenever Jev is what's being tested.
+- **Leave the main runs alone.** Read the warehouse read-only, or work on a
+  copy (`RELEVANCY_DB=/tmp/copy.duckdb`). A study that changes a namespace,
+  like `relevance-ontology`'s patch, says so.
+- **Report cost and latency next to quality.**
+
+## Before you start
+
+**Keys:**
+- `TURBOPUFFER_API_KEY`: anything that searches.
+- `TYPESAFE_API_KEY` (Jev): almost everything.
+- `OPENROUTER_API_KEY`: studies that need an LLM to write text or label
+  ground truth (`judge-trec`, `relevance-constraints`,
+  `database-semantic-operators`, `recall-rewrites`, `benchmark-bright`).
+
+Each study's README lists the rest under **Needs**.
+
+**Licences** (checked October 2026):
+
+| Dataset | Licence |
+| --- | --- |
+| ESCI | Apache-2.0 ✅ |
+| WANDS | MIT ✅ |
+| BRIGHT | CC BY 4.0 ✅ |
+| SQID | MIT for the data. The images are Amazon's, so evaluate on them but don't redistribute them. ⚠️ |
+| TREC DL 2019/2020, LLMJudge | MS MARCO terms: "intended for non-commercial research purposes only". Get a legal review before customer-facing use. ⚠️ |
+| FollowIR | Text from licensed news collections (Robust04, the NYT corpus, the Washington Post) ⚠️ |
+| ExcluIR, SemBench | No licence file in the repo ⚠️ |
+| STaRK | Code MIT. The Amazon data's terms aren't stated. ⚠️ |
+| NevIR | Code MIT; built on CondaQA (Apache-2.0) |
+| ScaleDoc's workloads | Not public ❌ |
+
+## Recomputing the documented numbers
+
+`evidence.py` recomputes every number in `docs/results.md` from the
+warehouse and the finished studies' results:
+
+```bash
+uv run experiments/evidence.py | tee experiments/records/evidence.txt
+```
+
+[`records/`](records/) keeps logs from the main runs that the warehouse
+doesn't store: the first full load, and the judge bake-off's latency lines.
