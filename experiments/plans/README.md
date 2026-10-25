@@ -29,6 +29,11 @@ with attributes you compute once.
 | 12 | [Instruction-following and semi-structured retrieval](12_instructions_stark.md) | FollowIR, InfoSearch, STaRK-Amazon | Plan |
 | 13 | [Reasoning retrieval: BRIGHT](13_bright.md) | BRIGHT, a few domains | Plan, lowest priority |
 
+[`requirements.md`](requirements.md) lists what each plan needs before it
+can run: keys, data access, licences, code changes, and blockers. Read it
+first. TREC DL and LLMJudge are licensed for non-commercial research only,
+and ScaleDoc's workloads don't appear to be public.
+
 ## Rules every plan follows
 
 - **Fix the settings before looking at results.** If a plan picks among

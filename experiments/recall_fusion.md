@@ -27,9 +27,10 @@ RRF may break ties differently or count ranks from 0, so a top-50 overlap
 of about 0.95 or more is good enough, and below that the sweep's numbers
 don't describe the server.
 
-Weighted RRF isn't something the stored runs ever asked the server for.
-If a weighted setting wins, either confirm the server can weight RRF
-subqueries or fuse client-side in production, and say which.
+turbopuffer's RRF takes a weight per subquery and a rank constant
+(`rerank_by=("RRF", {"weights": [...], "rank_constant": k})`), so any
+setting the sweep picks can run on the server as is. Run the winner there
+once to confirm it matches.
 
 ## Pre-registered settings
 
