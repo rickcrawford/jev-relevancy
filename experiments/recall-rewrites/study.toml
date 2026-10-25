@@ -1,0 +1,7 @@
+title = "Query rewrites and document expansion"
+premise = "Rewrites and document expansion close vocabulary gaps."
+status = "planned"
+rank = 11
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = true
+decide = "Recall@50 rises with lower bound above zero and nDCG@10 after Voyage doesn't fall. Run only if recall-fusion finds vocabulary misses."

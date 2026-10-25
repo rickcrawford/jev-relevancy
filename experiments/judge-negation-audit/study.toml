@@ -1,0 +1,19 @@
+title = "When Jev disagrees with humans on negation"
+premise = "On negation queries, when Jev and the human labels disagree, the humans may be the ones who are wrong."
+status = "done"
+keys = []
+base = true
+decide = "Done: of 43 disagreements on real negations, the product had the excluded thing in 32."
+
+[[steps]]
+name = "export"
+run = "uv run experiments/judge-negation-audit/negation_audit.py export"
+paid = false
+output = "results/export.txt"
+note = "then a blind rater fills in results/negation_answers.csv"
+
+[[steps]]
+name = "report"
+run = "uv run experiments/judge-negation-audit/negation_audit.py report"
+paid = false
+output = "results/report.txt"

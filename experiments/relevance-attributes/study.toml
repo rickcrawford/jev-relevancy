@@ -1,0 +1,7 @@
+title = "Semantic attributes at index time"
+premise = "A concept stored once per product ('replacement part') fixes the queries that ask for it."
+status = "planned"
+rank = 4
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = true
+decide = "attr-soft vs hybrid on the replacement-part queries, nDCG@10, lower bound above zero. Stop first if label precision is under 0.9."

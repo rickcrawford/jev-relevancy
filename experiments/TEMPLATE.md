@@ -26,6 +26,26 @@ The one comparison that answers the premise, and the result that would count (us
 
 Unlabeled results, Jev being both the method and the judge, labels leaking into the method, picking the best of many settings.
 
+## study.toml
+
+The runner reads this file next to the README:
+
+```toml
+title = "Study title"
+premise = "One sentence a result could prove wrong."
+status = "planned"            # planned, ready, or done
+rank = 5
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = true                   # needs the full ESCI base
+decide = "The pass mark from What counts, in one line."
+
+[[steps]]
+name = "fetch"
+run = "uv run experiments/<group>-<name>/<script>.py fetch"
+paid = true                   # calls turbopuffer, Jev, or an LLM
+output = "results/fetch.txt"  # optional; otherwise results/logs/<name>.log
+```
+
 ## Needs
 
 Keys, downloads, code changes, and anything blocked.

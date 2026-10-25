@@ -118,7 +118,7 @@ Once the ESCI base is built (the full load plus steps 4, 6, and 8; [the list](ex
 | How Jev does on public benchmarks | [`judge-trec`](experiments/judge-trec/) (non-commercial data), [`benchmark-instructions-stark`](experiments/benchmark-instructions-stark/), [`benchmark-bright`](experiments/benchmark-bright/) |
 | Whether Jev can run LLM filters in SQL | [`database-semantic-operators`](experiments/database-semantic-operators/) |
 
-The [catalog](experiments/README.md) ranks all of them, with status, dataset, and licence. [`TEMPLATE.md`](experiments/TEMPLATE.md) starts a new one.
+The [catalog](experiments/README.md) ranks all of them, with status, dataset, and licence. `uv run experiments/run.py list` shows the same from the terminal, and `run <study>` runs one; paid steps only run with `--yes`. To have an agent run them, point it at [`AGENTS.md`](AGENTS.md), or use the `run-study` skill in Claude Code. [`llms.txt`](llms.txt) indexes the repo for models.
 
 ## How it uses tpuf-arrow
 
@@ -147,13 +147,14 @@ The scripts double as an example of tpuf-arrow. Most of the calls are in [`src/r
 
 ```
 scripts/        the walkthrough, one numbered step per file
-experiments/    one folder per study (README, script, results), plus evidence.py, which recomputes every number
+experiments/    one folder per study (README, study.toml, script, results), run.py to run them, and evidence.py, which recomputes every number
 src/relevancy/  shared code: warehouse, turbopuffer queries, judges, metrics
 rubrics/        what "relevant" means, one TOML file per rubric
 sample/         176 ESCI products, 8 queries, and their grades, for a quick try
 warehouse/      schema.sql (checked in) and relevancy.duckdb (built by the scripts)
 docs/           the walkthrough, results, warehouse guide, benchmark survey, and connector design
 data/           downloaded datasets (git-ignored)
+.claude/skills/ run-study, the skill an agent follows to run a study (see AGENTS.md and llms.txt)
 ```
 
 Every run records its config and git commit, so a number in a results table traces back to the code that produced it. (The headline runs recorded a dirty tree; [docs/results.md](docs/results.md) says which commit.)

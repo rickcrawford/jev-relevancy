@@ -1,0 +1,7 @@
+title = "Semantic SQL operators and filter cascades"
+premise = "Jev makes LLM filters in SQL affordable at table scale."
+status = "planned"
+rank = 8
+keys = ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = false
+decide = "SemBench text queries: quality within the published range at lower cost. Cascades: fewer LLM calls than an embedding first stage at the same recall-target miss rate."

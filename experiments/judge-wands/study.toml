@@ -1,0 +1,7 @@
+title = "A second catalogue: WANDS"
+premise = "Jev's agreement with human labels holds on Wayfair's catalogue."
+status = "planned"
+rank = 1
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = false
+decide = "Holds if Jev's tau over the runs is at least 0.71 and pooled kappa at least 0.35; fails if tau under 0.60 or kappa under 0.30."

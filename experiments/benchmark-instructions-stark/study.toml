@@ -1,0 +1,7 @@
+title = "Instruction-following and multi-condition retrieval"
+premise = "Per-condition checks let a cheap model follow multi-condition requests."
+status = "planned"
+rank = 12
+keys = ["TYPESAFE_API_KEY"]
+base = false
+decide = "STaRK: Hit@1 above the best published reranker at similar cost. FollowIR: p-MRR interval above zero."

@@ -11,3 +11,7 @@ data/
 warehouse/*.duckdb
 warehouse/*.duckdb.wal
 warehouse/*.parquet
+
+# step logs written by experiments/run.py (run records in results/runs/ are kept)
+experiments/*/results/logs/
+experiments/records/logs/

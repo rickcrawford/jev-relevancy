@@ -1,0 +1,7 @@
+title = "Query routing by query type"
+premise = "Different query types want different retrieval settings."
+status = "planned"
+rank = 10
+keys = ["TYPESAFE_API_KEY"]
+base = true
+decide = "Routed vs recall-fusion's best single setting, held-out nDCG@10 after Voyage, lower bound above zero."

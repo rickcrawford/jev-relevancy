@@ -1,0 +1,51 @@
+title = "Ontology-matched search"
+premise = "Matching the query's product category to product categories (both tagged by Jev against the Google taxonomy) improves hybrid search."
+status = "ready"
+rank = 3
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = true
+decide = "Primary: onto-soft vs hybrid, nDCG@10 on human labels, lower bound above zero, with condensed and filled not clearly negative. Worth building only if onto-soft+voyage also beats hybrid+voyage. Stop if oracle-soft gains under 0.01."
+
+[[steps]]
+name = "taxonomy"
+run = "uv run experiments/relevance-ontology/ontology_search.py taxonomy"
+paid = true
+
+[[steps]]
+name = "tag-docs"
+run = "uv run experiments/relevance-ontology/ontology_search.py tag-docs"
+paid = true
+scoped = true
+note = "resumable; rerun if it stops"
+
+[[steps]]
+name = "patch"
+run = "uv run experiments/relevance-ontology/ontology_search.py patch"
+paid = true
+scoped = true
+note = "writes category_path to the product namespace"
+
+[[steps]]
+name = "tag-queries"
+run = "uv run experiments/relevance-ontology/ontology_search.py tag-queries"
+paid = true
+scoped = true
+
+[[steps]]
+name = "run"
+run = "uv run experiments/relevance-ontology/ontology_search.py run"
+paid = true
+scoped = true
+
+[[steps]]
+name = "judge"
+run = "uv run experiments/relevance-ontology/ontology_search.py judge"
+paid = true
+scoped = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/relevance-ontology/ontology_search.py report"
+paid = false
+output = "results/ontology_search.txt"
+scoped = true

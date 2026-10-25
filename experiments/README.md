@@ -18,6 +18,18 @@ uv run scripts/08_judge_runs.py --judge jev-batched:jev-1.13.0
 
 Studies open the warehouse read-only. Set `RELEVANCY_DB` to point them, and the main scripts, at a copy.
 
+## Run one
+
+```bash
+uv run experiments/run.py list                     # every study, ranked
+uv run experiments/run.py check recall-fusion      # keys, base, files: what's missing
+uv run experiments/run.py base                     # what the base still needs (add --yes to build it)
+uv run experiments/run.py run recall-fusion        # dry run: the steps, paid ones marked
+uv run experiments/run.py run recall-fusion --yes  # run them
+```
+
+Each study's `study.toml` lists its steps, which ones cost money, and the pass mark. Paid steps only run with `--yes`. Every run writes `results/runs/<time>.json` with exit codes and the commit. Add `--json` to `list`, `show`, `check`, `base`, or `status` if a model is driving. The [`run-study` skill](../.claude/skills/run-study/SKILL.md) and [`AGENTS.md`](../AGENTS.md) tell an agent how to run, record, and build studies.
+
 ## Start from your question
 
 **Can an automated grader stand in for human labels?** Start with [`judge-wands`](judge-wands/), which asks whether Jev's ESCI agreement holds on a second retailer. [`judge-trec`](judge-trec/) is the same claim on TREC, but its data is non-commercial. Four robustness checks are finished: [negation](judge-negation-audit/), [batch order](judge-batch-order/), [description length](judge-truncation/), and [Jev 1.14](judge-jev-1.14/).
@@ -67,11 +79,12 @@ If I had to pick two to run next, they'd be `recall-fusion` and `relevance-reran
 ```
 experiments/<group>-<name>/
   README.md     premise, method, how to run it, what counts, what it needs
+  study.toml    the same for run.py: keys, steps, which steps are paid, the pass mark
   *.py          the script, if it has one
-  results/      small CSVs and text it wrote, committed
+  results/      small CSVs and text it wrote, and runs/*.json; committed
 ```
 
-Big intermediate files go to `data/<name>/`, which git ignores. [`TEMPLATE.md`](TEMPLATE.md) starts a new one.
+Big intermediate files go to `data/<name>/`, and step logs to `results/logs/`; git ignores both. [`TEMPLATE.md`](TEMPLATE.md) starts a new one; add a `study.toml` next to it.
 
 ## Rules every study follows
 

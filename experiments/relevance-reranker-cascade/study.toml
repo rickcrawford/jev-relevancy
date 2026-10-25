@@ -1,0 +1,7 @@
+title = "Reranker ensemble and cascade"
+premise = "Combining rerankers, or escalating only when unsure, matches Voyage for less."
+status = "planned"
+rank = 6
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = true
+decide = "Better: held-out nDCG@10 above Voyage's, lower bound above zero. Same quality, cheaper: TOST within 0.01 and lower serving cost per query."

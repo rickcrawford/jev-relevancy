@@ -1,0 +1,7 @@
+title = "Learning to rank"
+premise = "A trained ranker beats any single reranker, even trained on Jev's labels."
+status = "planned"
+rank = 9
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = true
+decide = "The model vs Voyage over the top 100 on the 500 test queries, nDCG@10 and condensed, lower bound above zero."

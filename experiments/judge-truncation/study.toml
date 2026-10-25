@@ -1,0 +1,12 @@
+title = "Does the judge need more of the description?"
+premise = "Showing the judge 4,000 characters of description instead of 800 changes its agreement with humans."
+status = "done"
+keys = ["TYPESAFE_API_KEY"]
+base = true
+decide = "Done: no. Exact 0.600 vs 0.606, kappa 0.410 vs 0.406."
+
+[[steps]]
+name = "grade"
+run = "uv run experiments/judge-truncation/truncation.py"
+paid = true
+output = "results/grade.txt"

@@ -1,0 +1,7 @@
+title = "Jev as a judge on TREC"
+premise = "Jev orders TREC DL systems like NIST's assessors, as well as GPT-4o judges."
+status = "planned"
+rank = 7
+keys = ["TYPESAFE_API_KEY"]
+base = false
+decide = "Kendall's tau on DL20 between NIST and Jev system rankings, lower bound of the topic bootstrap at least 0.80. Research only (MS MARCO terms)."

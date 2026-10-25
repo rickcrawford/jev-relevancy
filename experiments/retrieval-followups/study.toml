@@ -1,0 +1,32 @@
+title = "Four retrieval follow-ups"
+premise = "Four small retrieval changes each move quality or latency."
+status = "done"
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = true
+decide = "Done: title-only BM25 +0.020; one-request Voyage at 100 candidates +0.016; brand filter +0.047 (upper bound)."
+
+[[steps]]
+name = "bm25"
+run = "uv run experiments/retrieval-followups/retrieval_followups.py bm25"
+paid = true
+
+[[steps]]
+name = "onecall"
+run = "uv run experiments/retrieval-followups/retrieval_followups.py onecall"
+paid = true
+
+[[steps]]
+name = "filters"
+run = "uv run experiments/retrieval-followups/retrieval_followups.py filters"
+paid = true
+
+[[steps]]
+name = "judged"
+run = "uv run experiments/retrieval-followups/retrieval_followups.py judged"
+paid = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/retrieval-followups/retrieval_followups.py report"
+paid = false
+output = "results/retrieval_followups.txt"

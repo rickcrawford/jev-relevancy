@@ -1,0 +1,7 @@
+title = "Reasoning retrieval: BRIGHT"
+premise = "As a first pass, Jev keeps most of a reasoning reranker's gain for less."
+status = "planned"
+rank = 13
+keys = ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = false
+decide = "Share of the reasoning LLM's gain the cascade keeps, per domain, with cost per query. No pass mark."
