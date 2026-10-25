@@ -20,6 +20,7 @@ note = "resumable"
 
 [[steps]]
 name = "train"
+modules = ["lightgbm"]
 run = "uv run experiments/relevance-ltr/ltr.py train"
 paid = false
 output = "results/train.txt"

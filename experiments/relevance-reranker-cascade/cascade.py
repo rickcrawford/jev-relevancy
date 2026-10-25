@@ -19,8 +19,8 @@ they add.
 
 import argparse
 import json
+import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from relevancy import jev
@@ -29,13 +29,13 @@ from relevancy.study import (
     NAMESPACE,
     compare,
     doc_texts,
+    interval,
     labels,
     latest_run,
     mean,
     per_query,
     run_lists,
     sampled,
-    tost,
     tune_half,
     write_csv,
 )
@@ -46,16 +46,24 @@ OUT = Path(__file__).resolve().parent / "results"
 DATA = ROOT / "data" / "cascade"
 MARGIN = 0.01        # equivalence margin on nDCG@10, fixed before the run
 CASCADE_TOP = 20     # how many of Voyage's top products Jev reorders
-WEIGHTS = [i / 10 for i in range(11)]
+WEIGHTS = [i / 10 for i in range(1, 10)]  # 0 and 1 would just be Jev or Voyage alone
+# Serving prices, for the "cheaper" verdict: dollars per Voyage rerank call and per Jev request. Without
+# both, the report gives call counts only and can't call anything cheaper.
+PRICES = {"voyage": os.environ.get("VOYAGE_PRICE"), "jev": os.environ.get("JEV_PRICE")}
 
 
 def held_and_tune(qids):
     return {q for q in qids if not tune_half(q)}, {q for q in qids if tune_half(q)}
 
 
-def verdict(name: str, a: dict, b: dict) -> None:
-    _, lo, hi, _, eq = tost(a, b, MARGIN)
-    print(f"  {name:<22} {compare(a, b)}   TOST 90% [{lo:+.3f}, {hi:+.3f}] {'equivalent' if eq else 'not shown equivalent'}")
+def verdict(name: str, a: dict, b: dict, k: int) -> None:
+    """`k` variants are compared with the same baseline, so both tests are Bonferroni-corrected."""
+    diffs = [a[q] - b[q] for q in sorted(a.keys() & b.keys())]
+    lo95, hi95 = interval(diffs, 1 - 0.05 / k)
+    lo, hi = interval(diffs, 1 - 0.10 / k)  # TOST: two one-sided tests at 5% / k each
+    better = "better" if lo95 > 0 else "not shown better"
+    eq = "equivalent" if -MARGIN < lo and hi < MARGIN else "not shown equivalent"
+    print(f"  {name:<22} {compare(a, b)}; corrected [{lo95:+.3f}, {hi95:+.3f}] {better}; TOST {eq}")
 
 
 # -- ensembles (stored runs, no requests) -------------------------------------
@@ -106,10 +114,11 @@ def run_ensembles(args):
     write_csv(OUT / "ensembles.csv", rows, ["variant", "query_id", "ids"])
 
     base = ndcg_of(variants["voyage (stored)"], held)
-    print(f"\n## Ensembles of the stored top-50 reranks, held-out half, against Voyage (weight picked on {len(tune)} queries)")
-    for v, fn in variants.items():
-        if v != "voyage (stored)":
-            verdict(v, ndcg_of(fn, held), base)
+    others_ = [v for v in variants if v != "voyage (stored)"]
+    print(f"\n## Ensembles of the stored top-50 reranks, held-out half, against Voyage (weight picked on {len(tune)} "
+          f"queries; intervals corrected for {len(others_)} comparisons)")
+    for v in others_:
+        verdict(v, ndcg_of(variants[v], held), base, len(others_))
     print("  Serving cost: every ensemble pays for each reranker it combines.")
 
 
@@ -119,6 +128,18 @@ def save(name, rows):
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / f"{name}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     print(f"wrote {len(rows)} rows to data/cascade/{name}.jsonl")
+
+
+def append(name, row):
+    """One row per query as it finishes, so a failure keeps what's paid for and a rerun resumes."""
+    DATA.mkdir(parents=True, exist_ok=True)
+    with open(DATA / f"{name}.jsonl", "a") as f:
+        f.write(json.dumps(row) + "\n")
+
+
+def done(name) -> set[str]:
+    path = DATA / f"{name}.jsonl"
+    return {json.loads(line)["query_id"] for line in path.read_text().splitlines()} if path.exists() else set()
 
 
 def load_rows(name):
@@ -146,12 +167,13 @@ def timed(fn, *a, **kw):
 
 
 def run_voyage(args):
-    cands, tp, rows = load_rows("candidates"), client(), []
+    cands, tp, skip = load_rows("candidates"), client(), done("voyage")
     for qid, c in cands.items():
+        if qid in skip:
+            continue
         hits, ms = timed(rerank, tp, NAMESPACE, "voyage/rerank-3", c["text"], c["ids"], run_id="cascade-voyage",
                          query_id=qid)
-        rows.append({"query_id": qid, "ids": hits["id"].to_pylist(), "ms": round(ms, 1)})
-    save("voyage", rows)
+        append("voyage", {"query_id": qid, "ids": hits["id"].to_pylist(), "ms": round(ms, 1), "calls": 1})
 
 
 def jev_order(client_, rubric, text, ids, texts):
@@ -160,32 +182,35 @@ def jev_order(client_, rubric, text, ids, texts):
     return order, {d: grades[d].expected for d in ids}
 
 
+def requests(n: int) -> int:
+    return -(-n // jev.PER_REQUEST)  # Jev takes PER_REQUEST products a request
+
+
 def run_jev(args):
-    cands, rubric, judge = load_rows("candidates"), load("esci"), jev.client()
+    # Serial, like Voyage, so wall times compare (a thread pool would add contention to Jev's).
+    cands, rubric, judge, skip = load_rows("candidates"), load("esci"), jev.client(), done("jev")
     with read_only() as con:
         texts = doc_texts(con, [d for c in cands.values() for d in c["ids"]])
-
-    def one(item):
-        qid, c = item
+    for qid, c in cands.items():
+        if qid in skip:
+            continue
         (order, expected), ms = timed(jev_order, judge, rubric, c["text"], c["ids"], texts)
-        return {"query_id": qid, "ids": order, "expected": [expected[d] for d in order], "ms": round(ms, 1)}
-
-    with ThreadPoolExecutor(4) as pool:
-        save("jev", list(pool.map(one, cands.items())))
+        append("jev", {"query_id": qid, "ids": order, "expected": [expected[d] for d in order], "ms": round(ms, 1),
+                       "calls": requests(len(order))})
 
 
 def run_cascade(args):
     cands, voyage, rubric, judge = load_rows("candidates"), load_rows("voyage"), load("esci"), jev.client()
+    skip = done("cascade")
     with read_only() as con:
         texts = doc_texts(con, [d for v in voyage.values() for d in v["ids"][:CASCADE_TOP]])
-
-    def one(qid):
+    for qid in voyage:
+        if qid in skip:
+            continue
         top = voyage[qid]["ids"][:CASCADE_TOP]
         (order, _), ms = timed(jev_order, judge, rubric, cands[qid]["text"], top, texts)
-        return {"query_id": qid, "ids": order + voyage[qid]["ids"][CASCADE_TOP:], "ms": round(ms, 1)}
-
-    with ThreadPoolExecutor(4) as pool:
-        save("cascade", list(pool.map(one, voyage)))
+        append("cascade", {"query_id": qid, "ids": order + voyage[qid]["ids"][CASCADE_TOP:], "ms": round(ms, 1),
+                           "calls": requests(len(top))})
 
 
 def run_report(args):
@@ -207,28 +232,41 @@ def run_report(args):
     # The smallest margin whose tuning-half nDCG is within the equivalence margin of Voyage's: cheapest that keeps quality.
     tuned = {m: mean(per_query({q: r[q] for q in tune}, human)) for m in margins for r in [escalate(m)]}
     margin = next((m for m in margins if tuned[m] >= mean(base_tune) - MARGIN), margins[-1])
+    def cost(voyage_calls, jev_calls):
+        if not all(PRICES.values()):
+            return None
+        return voyage_calls * float(PRICES["voyage"]) + jev_calls * float(PRICES["jev"])
+
+    # (ranking, wall ms per query, (Voyage calls, Jev requests) per query)
     variants = {
-        "jev, top 100": ({q: jev_rows[q]["ids"] for q in queries}, lambda q: jev_rows[q]["ms"], lambda q: "Jev"),
+        "jev, top 100": ({q: jev_rows[q]["ids"] for q in queries}, lambda q: jev_rows[q]["ms"],
+                         lambda q: (0, jev_rows[q]["calls"])),
         f"cascade (Jev on Voyage's top {CASCADE_TOP})": ({q: cascade[q]["ids"] for q in queries},
                                                        lambda q: voyage[q]["ms"] + cascade[q]["ms"],
-                                                       lambda q: "Voyage + small Jev"),
+                                                       lambda q: (1, cascade[q]["calls"])),
         f"escalate, margin {margin}": (escalate(margin),
                                        lambda q: jev_rows[q]["ms"] + (voyage[q]["ms"] if unsure(q, margin) else 0),
-                                       lambda q: "Jev + Voyage" if unsure(q, margin) else "Jev"),
+                                       lambda q: (int(unsure(q, margin)), jev_rows[q]["calls"])),
     }
     base = per_query({q: voyage[q]["ids"] for q in held}, human)
-    print(f"\n## Against Voyage over the top 100, held-out half ({len(held)} queries)")
-    print(f"  baseline Voyage top 100: nDCG@10 {mean(base):.3f}, wall p50 {pct([voyage[q]['ms'] for q in held], .5):.0f} ms")
+    base_cost = cost(len(held), 0)
+    print(f"\n## Against Voyage over the top 100, held-out half ({len(held)} queries; "
+          f"intervals corrected for {len(variants)} comparisons)")
+    print(f"  baseline Voyage top 100: nDCG@10 {mean(base):.3f}, wall p50 {pct([voyage[q]['ms'] for q in held], .5):.0f} ms"
+          + (f", ${base_cost / len(held):.5f} a query" if base_cost is not None else ""))
     for name, (ranked, ms, calls) in variants.items():
         a = per_query({q: ranked[q] for q in held}, human)
-        verdict(name, a, base)
+        verdict(name, a, base, len(variants))
         c = per_query({q: ranked[q] for q in held}, human, "condensed")
         cb = per_query({q: voyage[q]["ids"] for q in held}, human, "condensed")
+        v_calls = sum(calls(q)[0] for q in held)
+        j_calls = sum(calls(q)[1] for q in held)
+        total = cost(v_calls, j_calls)
+        price = (f"${total / len(held):.5f} a query, {'cheaper' if total < base_cost else 'not cheaper'} than Voyage"
+                 if total is not None else "set VOYAGE_PRICE and JEV_PRICE to price it")
         print(f"    condensed {compare(c, cb)}; wall p50 {pct([ms(q) for q in held], .5):.0f} ms, "
               f"p99 {pct([ms(q) for q in held], .99):.0f} ms")
-        if name.startswith("escalate"):
-            share = sum(unsure(q, margin) for q in held) / len(held)
-            print(f"    sent to Voyage: {share:.0%} of queries")
+        print(f"    calls: {v_calls / len(held):.2f} Voyage and {j_calls / len(held):.2f} Jev a query; {price}")
 
 
 def pct(vals, p):

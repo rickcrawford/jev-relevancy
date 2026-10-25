@@ -118,7 +118,7 @@ Once the ESCI base is built (the full load plus steps 4, 6, and 8; [the list](ex
 | How Jev does on public benchmarks | [`judge-trec`](experiments/judge-trec/) (non-commercial data), [`benchmark-instructions-stark`](experiments/benchmark-instructions-stark/), [`benchmark-bright`](experiments/benchmark-bright/) |
 | Whether Jev can run LLM filters in SQL | [`database-semantic-operators`](experiments/database-semantic-operators/) |
 
-The [catalog](experiments/README.md) ranks all of them, with status, dataset, and licence. `uv run relevancy list` shows the same from the terminal, and `uv run relevancy run <study>` runs one; paid steps only run with `--yes`. The same CLI runs the numbered steps (`uv run relevancy pipeline load --scope full`) and recomputes the documented numbers (`uv run relevancy evidence`). To have an agent run them, point it at [`AGENTS.md`](AGENTS.md), or use the `run-study` skill in Claude Code. [`llms.txt`](llms.txt) indexes the repo for models.
+The [catalog](experiments/README.md) ranks all of them, with status, dataset, and licence. `uv run relevancy list` shows the same from the terminal, and `uv run relevancy run <study>` runs one; paid steps only run with `--yes`. The same CLI runs the numbered steps (`uv run relevancy pipeline load --scope full --yes`). It also recomputes the documented numbers (`uv run relevancy evidence`). To have an agent run them, point it at [`AGENTS.md`](AGENTS.md), or use the `run-study` skill in Claude Code. [`llms.txt`](llms.txt) indexes the repo for models.
 
 ## How it uses tpuf-arrow
 
@@ -149,7 +149,7 @@ The scripts double as an example of tpuf-arrow. Most of the calls are in [`src/r
 scripts/        the walkthrough, one numbered step per file
 experiments/    one folder per study (README, study.toml, script, results), and evidence.py, which recomputes every number
 src/relevancy/cli.py  the `relevancy` CLI: pipeline steps, studies, evidence
-tests/          offline tests: every study's steps against fake turbopuffer, Jev, and LLM clients
+tests/          offline tests: every study's steps against fakes; they show the scripts run, not that methods work
 src/relevancy/  shared code: warehouse, turbopuffer queries, judges, metrics
 rubrics/        what "relevant" means, one TOML file per rubric
 sample/         176 ESCI products, 8 queries, and their grades, for a quick try

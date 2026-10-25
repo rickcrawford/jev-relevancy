@@ -70,8 +70,9 @@ Before you call it ready, add a test in `tests/` that runs every step, paid ones
 
 ## Things that are easy to get wrong
 
-- Studies need the **full** namespace (`esci-us-full`). The quick start's smoke namespace only works for `relevance-ontology --scope smoke`.
-- `relevance-ontology`'s `patch` step writes a new attribute to the namespace the main runs use. Mention it before running.
+- Studies need the **full** namespace (`esci-us-full`). `--scope smoke` only works for steps marked `scoped` (today, `relevance-ontology`'s); `run` refuses it otherwise.
+- Three steps write a new attribute to `esci-us-full`, the namespace the main runs use: `patch` in `relevance-ontology` and `relevance-attributes`, and `patch-expansion` in `recall-rewrites`. Mention it before running.
+- Some parts are by hand and the CLI stops short of them: TREC run files for `judge-trec`'s tau, LLMJudge, SemBench, ExcluIR, and `relevance-attributes`' rating step (resume with `--from precision`).
 - Jev is also the judge in the filled metrics. When Jev is the thing being tested, human labels are primary.
 - TREC DL, LLMJudge, FollowIR, ExcluIR, SemBench, and STaRK data have restricted or unstated licences (see `experiments/README.md`). Say so next to any result from them.
 - Never put API keys in a file other than `.env`, and never commit `.env`.

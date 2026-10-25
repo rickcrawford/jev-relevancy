@@ -4,35 +4,34 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | ESCI; NevIR test split; ExcluIR ⚠️ | about 1,000 Jev requests on ESCI | TypeSafe, OpenRouter |
+| Ready, not yet run (ExcluIR manual) | ESCI; NevIR test split; ExcluIR ⚠️ | 500 LLM calls; about 1,000 Jev requests on ESCI, about 2 a pair on NevIR | TypeSafe, OpenRouter |
 
 In ESCI terms, this is the gap between Exact and Substitute.
 
 ## Method
 
-1. **Find the constraints.** A small LLM call lists each query's constraints with their values ("brand: Tascam", "size: 12 oz", "excludes: wood"). Jev classifies but doesn't write text, so it can't extract values.
-2. **Check each product.** One `Noul` per candidate per constraint: "does this product match {constraint}?". Jev takes 50 questions a request, so a query with 50 candidates and two constraints is two requests.
-3. **Combine.** The reranker's score is multiplied by the probability that each constraint is met. Pick the softer variant's penalty weight on the tuning half.
+1. **Find the constraints.** An LLM (`CONSTRAINT_MODEL`, default `openai/gpt-4o-mini`) lists each query's constraints with their values ("brand: Tascam", "size: 12 oz", "excludes: wood"). Jev classifies but doesn't write text, so it can't extract values.
+2. **Check each product.** One `Noul` per candidate per constraint: "does this product match {constraint}?", or for an exclusion, "does it contain it?". A query with 50 candidates and two constraints is two Jev requests.
+3. **Combine.** The primary variant, fixed in advance: the reranker's score (normalized onto 0.1 to 1 per query) times every P(met). A penalty variant, with its weight picked on the tuning half, is reported as exploratory.
 
-Run it over the stored hybrid top 50 with Voyage and with Jev as the base reranker, and compare with each reranker alone.
+It runs over the stored hybrid top 50, with Voyage and with Jev as the base reranker.
 
 ## What counts
 
-- **ESCI:** `voyage+checks` against `voyage`, held-out nDCG@10, lower bound above zero. Break it down by constraint type. Negation queries are reported separately, because [`judge-negation-audit`](../judge-negation-audit/) found the human labels wrong on 74% of disagreements there, so human labels can't score them.
+- **ESCI:** Voyage times the checks against Voyage alone, held-out nDCG@10, lower bound above zero. Queries with an exclusion are left out of this and reported on their own line: a one-rater audit ([`judge-negation-audit`](../judge-negation-audit/)) found the human labels wrong on most disagreements there, so they can't score exclusions reliably. The by-type breakdown is descriptive.
 - **NevIR:** pairwise accuracy on the test split only, with a bootstrap interval, against the published test numbers (GPT-4o 70.1%, RankGPT with o3-mini 77.3%).
-- **ExcluIR:** Recall@1 and MRR against the paper's baselines.
+- **ExcluIR:** Recall@1 and MRR against the paper's baselines. Not automated; see Needs.
 
 ## Run
 
 ```bash
-uv run relevancy show relevance-constraints                # the steps, and which are paid
-uv run relevancy run relevance-constraints            # dry run
+uv run relevancy run relevance-constraints          # dry run
 uv run relevancy run relevance-constraints --yes
 ```
 
-`nevir` needs the `studies` extra (`uv sync --extra studies`). ExcluIR isn't automated: its data is a Google Drive folder with no documented format.
+`check` and `nevir` save as they go, so a rerun resumes.
 
 ## Needs
 
-- NevIR from Hugging Face (`orionweller/NevIR`). Pairwise accuracy is a few lines, so its own environment isn't needed.
-- ExcluIR from Google Drive. It has no licence file, so check its terms before publishing, and check the corpus size after download.
+- `uv sync --extra studies` for `nevir` (Hugging Face `datasets`).
+- ExcluIR is a Google Drive folder with no licence file and no documented format, so it's left out. Check its terms before publishing anything from it.

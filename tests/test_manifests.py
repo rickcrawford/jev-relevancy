@@ -12,7 +12,13 @@ def test_every_step_resolves():
     for path in studies:
         s = tomllib.loads(path.read_text())
         assert s["status"] in {"planned", "ready", "done"}, path
-        assert s["status"] != "planned", f"{path.parent.name} has no steps yet"
+        if s["status"] == "planned":
+            assert not s.get("steps"), f"{path.parent.name} is planned but lists steps"
+            continue
+        assert s.get("steps"), f"{path.parent.name} is {s['status']} but lists no steps"
+        for step in s["steps"]:
+            if "relevancy pipeline" in step["run"] and step.get("paid"):
+                assert "--yes" in step["run"], (path, step["name"])
         for step in s.get("steps", []):
             m = re.search(r"(experiments/[\w.-]+/\w+\.py)\s+([\w-]+)?", step["run"])
             if not m:

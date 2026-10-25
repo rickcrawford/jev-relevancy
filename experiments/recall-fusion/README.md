@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | ESCI, `esci-us-full` | 1,500 queries for `fetch`, 1,500 Voyage reranks; the sweep is offline | turbopuffer |
+| Ready, not yet run | ESCI, `esci-us-full` | 1,500 searches for `fetch`, 750 Voyage reranks; the sweep is offline | turbopuffer |
 
 `fetch` pulls each list's top 1,000 once: vector search, the main BM25, and title-only BM25. Everything after it is computed locally, so 180 fusion settings cost no more requests than one.
 
@@ -19,10 +19,10 @@ uv run experiments/recall-fusion/recall_fusion.py rerank
 
 ## Method
 
-- **`check`** fuses the stored lists the way turbopuffer does and compares them with the stored hybrid run. Below about 0.95 top-50 overlap, the sweep isn't describing the server, so stop and find out why. turbopuffer's RRF takes per-subquery `weights` and a `rank_constant`, so any setting the sweep picks can run on the server as is.
+- **`check`** fuses the stored lists the way turbopuffer does and compares them with the stored hybrid run. Below about 0.95 top-50 overlap, the sweep isn't describing the server, so the step stops the run; find out why before going on. turbopuffer's RRF takes per-subquery `weights` and a `rank_constant`, so any setting the sweep picks can run on the server as is.
 - **`diagnose`** buckets every Exact and Substitute product by its best rank under any list (top 10, 11 to 50, 51 to 100, 101 to 1,000, not found), with the share of query words in its title. Recall is averaged per query, as the stored 0.471 is.
 - **`sweep`** runs a fixed grid: which lists, depth 50 to 1,000, RRF k of 20, 60, or 120, and the vector list's weight. It picks a winner on half the queries by nDCG@10, condensed nDCG, and Recall@100, and reports each on the other half.
-- **`rerank`** runs Voyage over three candidate sets: the baseline's top 50, the baseline at depth 100, and the best recall setting's top 100. The middle one separates the effect of depth from the effect of better fusion. [`retrieval-followups`](../retrieval-followups/) already found depth 100 worth +0.016 with Voyage, so what this adds is whether better fusion beats depth alone.
+- **`rerank`** runs Voyage on the held-out half only, over three candidate sets: the baseline's top 50, the baseline at depth 100, and the best recall setting's top 100. The middle one separates the effect of depth from the effect of better fusion. [`retrieval-followups`](../retrieval-followups/) already found depth 100 worth +0.016 with Voyage, so what this adds is whether better fusion beats depth alone.
 
 ## What counts
 

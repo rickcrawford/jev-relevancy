@@ -411,15 +411,22 @@ def run_report(args) -> None:
     for r in rows:
         by_variant[r["variant"]][r["query_id"]] = r
 
-    # The oracle chose its category from half the Exact products; score it on the rest.
-    held_out = {qid: {d: g for d, g in labels.items() if not (g == 3 and oracle_half(qid, d))}
-                for qid, labels in human.items()}
+    # The oracle chose its category from half the Exact products. Score oracle comparisons on the rest:
+    # drop those products from the labels and from every ranked list (a residual collection), so they
+    # neither credit the oracle nor sit in its top 10 as unlabeled zero-gain results.
+    chose = {qid: {d for d, g in labels.items() if g == 3 and oracle_half(qid, d)} for qid, labels in human.items()}
+    held_out = {qid: {d: g for d, g in labels.items() if d not in chose[qid]} for qid, labels in human.items()}
+    filled_held = ({qid: {d: g for d, g in labels.items() if d not in chose.get(qid, set())}
+                    for qid, labels in filled.items()} if filled else None)
 
-    def metric(variant, fn, labels=human, only=None):
+    def metric(variant, fn, labels=human, only=None, drop=None):
         out = {}
         for qid, r in by_variant[variant].items():
             if only is None or qid in only:
-                v = fn(r["ids"].split(), labels.get(qid, {}))
+                ids = r["ids"].split()
+                if drop:
+                    ids = [d for d in ids if d not in drop.get(qid, set())]
+                v = fn(ids, labels.get(qid, {}))
                 if v is not None:
                     out[qid] = v
         return out
@@ -444,13 +451,15 @@ def run_report(args) -> None:
     print("\n## Quality, human labels (filled: Jev grades the top-10 products humans didn't label)")
     print(f"{'variant':<18}{'vs':<15}{'metric':<11}{'value':>7}{'delta [95% CI]':>26}{'n':>5}")
     for a, b in pairs:
-        labels = held_out if a.startswith("oracle") else human
+        is_oracle = a.startswith("oracle")
+        labels, drop = (held_out, chose) if is_oracle else (human, None)
         for name, fn in metrics.items():
-            sa, sb = metric(a, fn, labels), metric(b, fn, labels)
+            sa, sb = metric(a, fn, labels, drop=drop), metric(b, fn, labels, drop=drop)
             m, lo, hi, n = paired_delta(sa, sb)
             print(f"{a:<18}{b:<15}{name:<11}{sum(sa.values()) / len(sa):7.3f}{f'{m:+.3f} [{lo:+.3f}, {hi:+.3f}]':>26}{n:>5}")
         if filled:
-            sa, sb = metric(a, metrics["nDCG@10"], filled), metric(b, metrics["nDCG@10"], filled)
+            fl = filled_held if is_oracle else filled
+            sa, sb = metric(a, metrics["nDCG@10"], fl, drop=drop), metric(b, metrics["nDCG@10"], fl, drop=drop)
             m, lo, hi, n = paired_delta(sa, sb)
             print(f"{a:<18}{b:<15}{'filled':<11}{sum(sa.values()) / len(sa):7.3f}{f'{m:+.3f} [{lo:+.3f}, {hi:+.3f}]':>26}{n:>5}")
 

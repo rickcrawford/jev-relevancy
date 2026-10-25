@@ -8,6 +8,7 @@ decide = "Share of the reasoning LLM's gain the cascade keeps, per domain, with 
 
 [[steps]]
 name = "load"
+modules = ["datasets"]
 run = "uv run experiments/benchmark-bright/bright.py load"
 paid = true
 

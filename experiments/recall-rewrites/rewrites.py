@@ -22,13 +22,16 @@ Both:
 import argparse
 import json
 import os
+import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pyarrow as pa
 from typesafe_sdk import Noul
 
 from relevancy import jev, llm_judge
+from relevancy.metrics import paired_delta
 from relevancy.study import (
     compare,
     doc_texts,
@@ -52,6 +55,8 @@ quantity. Return JSON: {"rewrites": ["...", "...", "..."]} with three rephrasing
 EXPAND = """You write the queries a shopper would type to find this product. Vary the wording: common names,
 what it's for, and its key attributes. Return JSON: {"queries": ["...", "...", "...", "...", "..."]} with five."""
 CHUNK = 500
+NON_INFERIOR = 0.01  # nDCG@10 after Voyage "doesn't fall" if the lower bound is above -0.01, fixed in advance
+MISS_OVERLAP = 0.5   # a not-found product counts as a vocabulary miss when under half the query's words are in its title
 SCHEMA = pa.schema([("id", pa.string()), ("expansion", pa.string())])
 
 
@@ -60,13 +65,19 @@ def run_rewrite(args):
         queries = sampled(con)
     http, rows = llm_judge.client(), []
     for qid, text in queries:
+        started = time.perf_counter()  # the LLM call is what a rewrite adds before search
         raw = llm_judge.complete(http, MODEL, REWRITE, f"Query: {text}", max_tokens=200, json_mode=True)
+        ms = (time.perf_counter() - started) * 1000
         try:
             rewrites = [str(r) for r in json.loads(raw or "{}").get("rewrites", [])][:3]
         except (json.JSONDecodeError, AttributeError):
             rewrites = []
-        rows.append({"query_id": qid, "text": text, "rewrites": json.dumps(rewrites)})
+        rows.append({"query_id": qid, "text": text, "rewrites": json.dumps(rewrites), "ok": bool(rewrites),
+                     "ms": round(ms, 1)})
     write_csv(OUT / "rewrites.csv", rows)
+    ms = sorted(r["ms"] for r in rows)
+    print(f"  {sum(not r['ok'] for r in rows)} of {len(rows)} queries got no rewrites (they run as plain hybrid); "
+          f"LLM call p50 {ms[len(ms) // 2]:.0f} ms, p99 {ms[min(len(ms) - 1, int(0.99 * len(ms)))]:.0f} ms")
 
 
 def run_drift(args):
@@ -131,15 +142,20 @@ def run_expand(args):
         chunk = ids[i:i + CHUNK]
         with read_only() as con:
             texts = doc_texts(con, chunk)
-        rows = []
-        for d in chunk:
+        def one(d, texts=texts):
             raw = llm_judge.complete(http, MODEL, EXPAND, f"Product: {texts.get(d, '')}", max_tokens=200, json_mode=True)
             try:
                 qs = [str(q) for q in json.loads(raw or "{}").get("queries", [])][:5]
             except (json.JSONDecodeError, AttributeError):
                 qs = []
-            rows.append({"id": d, "expansion": " | ".join(qs)})
-        write_part(folder, rows, SCHEMA)
+            return {"id": d, "expansion": " | ".join(qs)} if qs else None
+
+        with ThreadPoolExecutor(8) as pool:
+            got = list(pool.map(one, chunk))
+        rows = [g for g in got if g]
+        if len(rows) < len(chunk):
+            print(f"  {len(chunk) - len(rows)} products got no expansion; a rerun retries them", flush=True)
+        write_part(folder, rows, SCHEMA)  # failures aren't written, so they're retried
         print(f"  {len(done) + i + len(chunk):,} expanded", flush=True)
 
 
@@ -181,7 +197,15 @@ def run_report(args):
     misses = set()
     diag = ROOT / "experiments" / "recall-fusion" / "results" / "recall_diagnose.csv"
     if diag.exists():
-        misses = {r["query_id"] for r in read_csv(diag) if r["bucket"] == "not found"}
+        # The README's vocabulary misses: products nothing found, whose titles share few of the query's words.
+        misses = {r["query_id"] for r in read_csv(diag)
+                  if r["bucket"] == "not found" and float(r["title_overlap"]) < MISS_OVERLAP}
+    rw = OUT / "rewrites.csv"
+    if rw.exists():
+        ms = sorted(float(r["ms"]) for r in read_csv(rw) if r.get("ms"))
+        if ms:
+            print(f"  rewrite latency before search: p50 {ms[len(ms) // 2]:.0f} ms, "
+                  f"p99 {ms[min(len(ms) - 1, int(0.99 * len(ms)))]:.0f} ms")
     for part in ("rewrites", "expansion"):
         path = OUT / f"runs-{part}-{args.scope}.csv"
         if not path.exists():
@@ -195,8 +219,13 @@ def run_report(args):
                 if subset != "all" and not only:
                     continue
                 print(f"  {v} vs hybrid, {subset}:")
+                a, b = per_query(by[v + "+voyage"], human, only=only), per_query(by["hybrid+voyage"], human, only=only)
+                _, lo, _, _ = paired_delta(a, b)
                 print(f"    R@50              {compare(per_query(by[v], human, 'R@50', only), per_query(by['hybrid'], human, 'R@50', only))}")
-                print(f"    nDCG@10 + Voyage  {compare(per_query(by[v + '+voyage'], human, only=only), per_query(by['hybrid+voyage'], human, only=only))}")
+                print(f"    nDCG@10 + Voyage  {compare(a, b)}  "
+                      f"{'does not fall' if lo > -NON_INFERIOR else 'may fall'} (lower bound vs -{NON_INFERIOR})")
+        if part == "expansion":
+            print("  Caveat: the LLM may have seen ESCI's queries in training, which would flatter expansion.")
 
 
 if __name__ == "__main__":

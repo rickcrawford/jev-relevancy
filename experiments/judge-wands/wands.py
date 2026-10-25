@@ -25,7 +25,7 @@ import duckdb
 
 from relevancy.agreement import kendall_tau, weighted_kappa
 from relevancy.metrics import per_query
-from relevancy.warehouse import ROOT, read_only
+from relevancy.warehouse import ROOT, read_only, sample_id
 
 OUT = Path(__file__).resolve().parent / "results"
 DATA = ROOT / "data" / "wands"
@@ -62,15 +62,30 @@ def run_prepare(args):
     raise SystemExit(subprocess.call(cmd, cwd=ROOT))
 
 
+def fair_runs(con) -> list[str]:
+    """Step 8's selection, so tau here is the same statistic as on ESCI: the latest run of each
+    retriever and reranker on the current sample, minus runs reranked by any Jev model (a Jev
+    judge would be grading its own homework)."""
+    rows = con.execute("""
+        SELECT run_id, reranker FROM runs WHERE dataset = ? AND config->>'sample' = ?
+        QUALIFY row_number() OVER (PARTITION BY retriever, reranker ORDER BY started_at DESC) = 1
+        ORDER BY run_id""", [DATASET, sample_id(con, DATASET)]).fetchall()
+    return [run_id for run_id, reranker in rows if "jev" not in reranker]
+
+
 def tau_with_interval(con, runs, draws=1000):
     human = per_query(con, DATASET, runs, judge="human")
     judged = per_query(con, DATASET, runs, judge=JUDGE)
     queries = sorted({q for _, q in human})
 
+    def run_mean(scores, r, qs):
+        # Like step 8: average over the queries both sides could score, not counting NULL as 0.
+        vals = [scores[(r, q)]["ndcg10"] for q in qs
+                if human[(r, q)]["ndcg10"] is not None and judged[(r, q)]["ndcg10"] is not None]
+        return sum(vals) / len(vals) if vals else float("nan")
+
     def tau(qs):
-        hm = [sum(human[(r, q)]["ndcg10"] or 0 for q in qs) / len(qs) for r in runs]
-        jm = [sum(judged[(r, q)]["ndcg10"] or 0 for q in qs) / len(qs) for r in runs]
-        return kendall_tau(hm, jm)
+        return kendall_tau([run_mean(human, r, qs) for r in runs], [run_mean(judged, r, qs) for r in runs])
 
     rnd = random.Random(0)
     taus = sorted(tau(rnd.choices(queries, k=len(queries))) for _ in range(draws))
@@ -79,8 +94,7 @@ def tau_with_interval(con, runs, draws=1000):
 
 def run_report(args):
     with read_only() as con:
-        runs = [r[0] for r in con.execute("SELECT run_id FROM runs WHERE dataset = ? ORDER BY run_id",
-                                          [DATASET]).fetchall()]
+        runs = fair_runs(con)
         if len(runs) < 3:
             raise SystemExit("Fewer than 3 runs on wands. Run the pipeline steps first (relevancy show judge-wands).")
         tau, lo, hi = tau_with_interval(con, runs)

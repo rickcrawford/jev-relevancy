@@ -1,3 +1,4 @@
+import json
 import sys
 import types
 from types import SimpleNamespace
@@ -25,10 +26,14 @@ def test_wands(world, capsys):
     assert con.execute("SELECT rubric FROM datasets WHERE dataset = 'wands'").fetchone()[0] == "wands"
     # Stand in for the pipeline steps: four runs and Jev grades.
     qids = [r[0] for r in con.execute("SELECT query_id FROM queries WHERE dataset = 'wands'").fetchall()]
-    for run in ("a", "b", "c", "d"):
-        con.execute("INSERT INTO runs (run_id, dataset, retriever, reranker) VALUES (?, 'wands', 'hybrid-rrf', ?)", [run, run])
+    from relevancy.warehouse import sample_id
+    config = json.dumps({"sample": sample_id(con, "wands")})
+    for run, reranker in (("a", "none"), ("b", "voyage/rerank-3"), ("c", "cohere/rerank-v3.5"),
+                          ("d", "zeroentropy/zerank-2"), ("j", "jev:jev-1.13.0")):
+        con.execute("INSERT INTO runs (run_id, dataset, retriever, reranker, config) VALUES (?, 'wands', 'hybrid-rrf', ?, ?)",
+                    [run, reranker, config])
         for q in qids:
-            docs = sorted(range(80), key=lambda d: h(run, q, d))[:20]
+            docs = sorted(range(80), key=lambda d, r=run, qq=q: h(r, qq, d))[:20]
             con.executemany("INSERT INTO results (run_id, query_id, doc_id, rank) VALUES (?, ?, ?, ?)",
                             [(run, q, str(d), i + 1) for i, d in enumerate(docs)])
     con.execute("""INSERT INTO judgments (dataset, query_id, doc_id, source, grade)
@@ -36,9 +41,11 @@ def test_wands(world, capsys):
                    FROM (SELECT DISTINCT r.query_id, r.doc_id FROM results r JOIN runs USING (run_id)
                          WHERE runs.dataset = 'wands' AND r.rank <= 10)""")
     con.close()
+    with duckdb.connect(str(world.db), read_only=True) as c2:
+        assert m.fair_runs(c2) == ["a", "b", "c", "d"]  # the Jev-reranked run is left out
     m.run_report(None)
     out = capsys.readouterr().out
-    assert "tau" in out and "pooled kappa" in out and any(w in out for w in ("HOLDS", "FAILS", "PARTIAL"))
+    assert "4 runs on wands" in out and "tau" in out and "pooled kappa" in out and any(w in out for w in ("HOLDS", "FAILS", "PARTIAL"))
 
 
 def test_trec(world, capsys, monkeypatch):

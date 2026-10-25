@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 from fakes import h
 
 
@@ -22,6 +23,7 @@ def raw_esci(root, docs):
 
 
 def test_ltr_end_to_end(world, monkeypatch, capsys):
+    pytest.importorskip("lightgbm", reason="needs the studies extra: uv sync --extra studies")
     m = world.study("relevance-ltr/ltr.py")
     monkeypatch.setattr(m, "RAW", raw_esci(world.tmp, world.docs))
     monkeypatch.setattr(m, "GRID", {"num_leaves": [7], "learning_rate": [0.1], "min_child_samples": [5]})

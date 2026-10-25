@@ -117,6 +117,8 @@ def run_llm(args):
                     return pair[0], None
             with ThreadPoolExecutor(8) as pool:
                 out[qid] = dict(pool.map(one, zip(c["ids"], c["texts"])))
+        failed = sum(v is None for scores in out.values() for v in scores.values())
+        print(f"  {domain}: {failed:,} of {sum(len(v) for v in out.values()):,} LLM scores failed (they rank last)")
         save(f"{domain}-llm", out)
 
 
@@ -128,6 +130,19 @@ def cascade(jev_scores, llm_scores, ids):
     """Jev orders all 100; the LLM reorders Jev's top 20; the rest keep Jev's order."""
     by_jev = order(jev_scores, ids)
     return order(llm_scores, by_jev[:CASCADE]) + by_jev[CASCADE:]
+
+
+def kept_interval(per_q, qids, draws=1000):
+    """Bootstrap over queries for (cascade - bm25) / (llm - bm25)."""
+    import random
+    rnd, vals = random.Random(0), []
+    for _ in range(draws):
+        qs = rnd.choices(qids, k=len(qids))
+        m = {n: sum(per_q[n][q] for q in qs) / len(qs) for n in ("bm25", "llm", "cascade")}
+        if m["llm"] != m["bm25"]:
+            vals.append((m["cascade"] - m["bm25"]) / (m["llm"] - m["bm25"]))
+    vals.sort()
+    return (vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals)) - 1]) if vals else (float("nan"), float("nan"))
 
 
 def run_report(args):
@@ -146,8 +161,11 @@ def run_report(args):
                  for name, by_q in ranked.items()}
         gain = score["llm"] - score["bm25"]
         kept = (score["cascade"] - score["bm25"]) / gain if gain else float("nan")
+        per_q = {n: {q: ndcg(by_q[q], {g: 1 for g in queries[q]["gold"]}) or 0 for q in qids} for n, by_q in ranked.items()}
+        lo, hi = kept_interval(per_q, qids)
         print(f"  {domain:<10} " + "  ".join(f"{n} {v:.3f}" for n, v in score.items())
-              + f"   cascade keeps {kept:.0%} of the LLM's gain with {CASCADE} LLM calls a query instead of {DEPTH}")
+              + f"   cascade keeps {kept:.0%} [{lo:.0%}, {hi:.0%}] of the LLM's gain with {CASCADE} LLM calls a query"
+              f" instead of {DEPTH}")
         rows.append({"domain": domain, **{n: round(v, 4) for n, v in score.items()}, "share_kept": round(kept, 4)})
     write_csv(OUT / "bright.csv", rows)
 

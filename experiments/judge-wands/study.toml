@@ -18,42 +18,42 @@ paid = false
 
 [[steps]]
 name = "load"
-run = "uv run relevancy pipeline load --dataset wands --scope full"
+run = "uv run relevancy pipeline load --yes --dataset wands --scope full"
 paid = true
 
 [[steps]]
 name = "search"
-run = "uv run relevancy pipeline search --dataset wands --scope full"
+run = "uv run relevancy pipeline search --yes --dataset wands --scope full"
 paid = true
 
 [[steps]]
 name = "rerank-voyage"
-run = "uv run relevancy pipeline rerank --dataset wands --model voyage/rerank-3"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model voyage/rerank-3"
 paid = true
 
 [[steps]]
 name = "rerank-cohere"
-run = "uv run relevancy pipeline rerank --dataset wands --model cohere/rerank-v3.5"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model cohere/rerank-v3.5"
 paid = true
 
 [[steps]]
 name = "rerank-zerank"
-run = "uv run relevancy pipeline rerank --dataset wands --model zeroentropy/zerank-2"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model zeroentropy/zerank-2"
 paid = true
 
 [[steps]]
 name = "rerank-jev"
-run = "uv run relevancy pipeline rerank --dataset wands --model jev:jev-1.13.0"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model jev:jev-1.13.0"
 paid = true
 
 [[steps]]
 name = "bakeoff"
-run = "uv run relevancy pipeline bakeoff --dataset wands --judge jev-batched:jev-1.13.0 --judge jev:jev-1.14.0"
+run = "uv run relevancy pipeline bakeoff --yes --dataset wands --judge jev-batched:jev-1.13.0 --judge jev:jev-1.14.0"
 paid = true
 
 [[steps]]
 name = "judge-runs"
-run = "uv run relevancy pipeline judge-runs --dataset wands --judge jev-batched:jev-1.13.0"
+run = "uv run relevancy pipeline judge-runs --yes --dataset wands --judge jev-batched:jev-1.13.0"
 paid = true
 
 [[steps]]

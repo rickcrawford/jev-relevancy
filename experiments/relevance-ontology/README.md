@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | ESCI, Google Product Taxonomy ⚠️ | about 9,700 Jev requests and 482k small vector searches to tag every product | turbopuffer, TypeSafe |
+| Ready, not yet run | ESCI, Google Product Taxonomy ⚠️ | about 9,700 Jev requests and 482k small vector searches to tag every product, then 5 × 500 searches | turbopuffer, TypeSafe |
 
 The brand-filter follow-up gained +0.047 with a perfect brand detector on 81 queries. Categories apply to nearly every query, but they're fuzzier than brands.
 
@@ -29,7 +29,7 @@ Every command takes `--scope smoke` for a pilot.
   - `hybrid`, rerun as the baseline;
   - `onto-soft`: hybrid plus the same two subqueries filtered to the category, fused by RRF, so nothing is dropped;
   - `onto-filter`: hybrid filtered to the category;
-  - `oracle-soft` and `oracle-filter`, with the category taken from half of the query's Exact products and scored on labels without that half;
+  - `oracle-soft` and `oracle-filter`, with the category taken from half of the query's Exact products and scored with that half's labels removed (a residual collection), so the oracle isn't scored on the products that gave it the answer;
   - Voyage over the top 50 of `hybrid` and of `onto-soft`.
 
 ## What counts

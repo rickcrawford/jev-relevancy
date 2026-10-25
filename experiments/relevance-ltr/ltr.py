@@ -118,7 +118,8 @@ def scores_by_id(table, key="score"):
 def query_features(tp, judge, rubric, split, qid, text, ids, docs):
     """One row per candidate, in hybrid's order."""
     if not ids:
-        return []
+        # A marker row, so a resume doesn't fetch this query again; training skips it.
+        return [{"split": split, "query_id": qid, "doc_id": None} | dict.fromkeys(FEATURES)]
     only = ("id", "In", ids)
     lists = {
         "ann_dist": scores_by_id(tp.query(NAMESPACE, ann_rank_by(text), top_k=len(ids), filters=only)),
@@ -234,7 +235,7 @@ def cv_params(rows, y, cols):
 
 
 def run_train(args):
-    feats = load_features().to_pylist()
+    feats = [r for r in load_features().to_pylist() if r["doc_id"] is not None]
     train = [r for r in feats if r["split"] == "train"]
     test = [r for r in feats if r["split"] == "test"]
     human = defaultdict(dict)
@@ -248,7 +249,8 @@ def run_train(args):
         "ltr without jev": ([f for f in FEATURES if f not in GROUPS["jev"]], y_human),
         "ltr without voyage": ([f for f in FEATURES if f not in GROUPS["voyage"]], y_human),
         "ltr without both": (GROUPS["retrieval"] + GROUPS["match"], y_human),
-        "ltr on jev labels": (FEATURES, y_jev),
+        # Without Jev's features: its labels are their argmax, so with them it would just relearn Jev.
+        "ltr on jev labels": ([f for f in FEATURES if f not in GROUPS["jev"]], y_jev),
     }
     out, importance = [], []
     for name, (cols, y) in variants.items():

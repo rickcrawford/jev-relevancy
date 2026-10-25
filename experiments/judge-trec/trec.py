@@ -16,6 +16,7 @@ Research only: MS MARCO is licensed for non-commercial research.
 """
 
 import argparse
+import gzip
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -53,6 +54,8 @@ def run_grade(args):
     by_q = defaultdict(dict)
     nist = {}
     for r in read_csv(folder / "qrels.csv"):
+        if r["doc_id"] not in passages:
+            print(f"  warning: no passage text for {r['doc_id']}; it is graded as empty")
         by_q[r["query_id"]][r["doc_id"]] = passages.get(r["doc_id"], "")
         nist[(r["query_id"], r["doc_id"])] = int(r["grade"])
     rubric, judge, rows = load("trec-dl"), jev.client(), []
@@ -66,13 +69,17 @@ def run_grade(args):
 
 
 def read_runs(folder: Path) -> dict[str, dict[str, list[str]]]:
-    runs: dict[str, dict[str, list[tuple[int, str]]]] = defaultdict(lambda: defaultdict(list))
-    for path in sorted(folder.iterdir()):
-        for line in path.read_text().splitlines():
-            parts = line.split()
-            if len(parts) >= 6:
-                runs[path.name][parts[0]].append((int(parts[3]), parts[2]))
-    return {name: {q: [d for _, d in sorted(v)] for q, v in by_q.items()} for name, by_q in runs.items()}
+    """TREC run files, plain or gzipped. Ordered by score, descending, as trec_eval does (it ignores rank)."""
+    runs: dict[str, dict[str, list[tuple[float, str]]]] = defaultdict(lambda: defaultdict(list))
+    for path in sorted(p for p in folder.iterdir() if p.is_file()):
+        opener = gzip.open if path.suffix == ".gz" else open
+        with opener(path, "rt") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 6:
+                    runs[path.name][parts[0]].append((float(parts[4]), parts[2]))
+    return {name: {q: [d for _, d in sorted(v, key=lambda x: (-x[0], x[1]))] for q, v in by_q.items()}
+            for name, by_q in runs.items()}
 
 
 def run_report(args):
@@ -99,7 +106,8 @@ def run_report(args):
     topics = sorted(labels_nist)
 
     def system_means(labels_, qs):
-        return [sum(ndcg(run.get(q, []), labels_[q]) or 0 for q in qs) / len(qs) for run in runs.values()]
+        # Linear gain, as trec_eval and UMBRELA's published taus use.
+        return [sum(ndcg(run.get(q, []), labels_[q], linear=True) or 0 for q in qs) / len(qs) for run in runs.values()]
 
     def tau(qs):
         return kendall_tau(system_means(labels_nist, qs), system_means(labels_jev, qs))

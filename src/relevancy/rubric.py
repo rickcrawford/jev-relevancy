@@ -43,6 +43,9 @@ def load(name: str) -> Rubric:
     levels = tuple(raw["levels"])
     # Four levels map to grades 0 to 3. A scale with fewer levels says which grade each one is,
     # e.g. WANDS's Irrelevant, Partial, Exact as grades = [0, 2, 3].
+    if len(levels) < 4 and "grades" not in raw:
+        raise SystemExit(f"{path.name}: has {len(levels)} levels, so it needs a `grades` list saying which "
+                         "0-to-3 grade each level is, e.g. grades = [0, 2, 3]")
     grades = tuple(raw.get("grades", range(len(levels))))
     if not 2 <= len(levels) <= 4 or len(grades) != len(levels) or list(grades) != sorted(set(grades)) \
             or not set(grades) <= set(GRADES):

@@ -1754,6 +1754,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
+    { name = "httpx" },
     { name = "pyarrow" },
     { name = "python-dotenv" },
     { name = "tpuf-arrow" },
@@ -1779,6 +1780,7 @@ dev = [
 requires-dist = [
     { name = "datasets", marker = "extra == 'studies'", specifier = ">=3.0" },
     { name = "duckdb", specifier = ">=2.0.0" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "ir-datasets", marker = "extra == 'studies'", specifier = ">=0.5.9" },
     { name = "lightgbm", marker = "extra == 'studies'", specifier = ">=4.5" },
     { name = "pyarrow", specifier = ">=26.0.0" },

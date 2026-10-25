@@ -35,6 +35,7 @@ output = "results/stark.txt"
 
 [[steps]]
 name = "followir-load"
+modules = ["datasets"]
 run = "uv run experiments/benchmark-instructions-stark/followir.py load"
 paid = false
 

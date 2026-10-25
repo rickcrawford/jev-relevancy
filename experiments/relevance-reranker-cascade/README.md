@@ -4,37 +4,36 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | ESCI | ensembles: no new requests; cascades: about 500 per reranker | TypeSafe, turbopuffer |
+| Ready, not yet run | ESCI | ensembles: nothing new; cascades: 500 Voyage reranks and about 1,500 Jev requests | TypeSafe, turbopuffer |
 
 ## Variants
 
-The ensembles reuse the stored reranker scores for the hybrid top 50, so they compare with stored Voyage at top 50. The cascades need new requests at top 100, so they compare with Voyage at top 100, which [`retrieval-followups`](../retrieval-followups/) found worth +0.016 over 50.
+The ensembles reuse the stored reranks of the hybrid top 50, so they compare with stored Voyage at 50. The cascades need new requests at 100, so they compare with Voyage at 100, which [`retrieval-followups`](../retrieval-followups/) found worth +0.016 over 50.
 
-| Variant | How | Baseline | Serving cost per query |
+| Variant | How | Baseline | Calls a query |
 | --- | --- | --- | --- |
-| Mean rank | average of Voyage's and Jev's ranks | Voyage, top 50 | Voyage plus Jev |
-| Score mix | per-query normalized scores, mixed with a weight picked on the tuning half | Voyage, top 50 | Voyage plus Jev |
-| Cascade | Voyage over the top 100, then Jev over Voyage's top 20 | Voyage, top 100 | Voyage plus a small Jev call |
-| Escalate when unsure | Jev over the top 100; Voyage only when Jev's top two expected grades are within a margin picked on the tuning half | Voyage, top 100 | Jev, plus Voyage on some share of queries |
+| Mean rank | average of Voyage's and Jev's ranks (and all four stored rerankers, if present) | Voyage, top 50 | every reranker combined |
+| Score mix | per-query normalized scores, weight picked on the tuning half from 0.1 to 0.9 | Voyage, top 50 | Voyage and Jev |
+| Cascade | Voyage over the top 100, then Jev over Voyage's top 20 | Voyage, top 100 | 1 Voyage, 1 Jev |
+| Escalate when unsure | Jev over the top 100; Voyage only when Jev's top two expected grades are within a margin picked on the tuning half | Voyage, top 100 | 2 Jev, plus Voyage on some queries |
 
 ## What counts
 
-Two kinds of win, each fixed in advance:
+Two kinds of win, each fixed in advance, with intervals Bonferroni-corrected for the number of variants in each group:
 
 - **Better:** held-out nDCG@10 above Voyage's, lower bound above zero.
-- **Same quality, cheaper:** an equivalence test (TOST) with a margin of ±0.01 nDCG@10, plus a lower serving cost per query. A plain non-significant difference isn't enough, since 250 queries can't rule out much.
+- **Same quality, cheaper:** an equivalence test (TOST) within ±0.01 nDCG@10, and a lower serving cost a query. Cost needs prices: set `VOYAGE_PRICE` (dollars a rerank call) and `JEV_PRICE` (dollars a Jev request). Without them the report gives call counts and won't call anything cheaper. The cascade always pays for Voyage and a Jev call, so it can only be better, never cheaper.
 
-Measure latency the same way for every variant: wall time from one client, each reranker call timed in the same loop. Jev is called directly and Voyage through turbopuffer, so compare the wall time each adds, not server time.
+Every reranker is called one query at a time from the same client, and latency is the wall time each call adds.
 
 ## Run
 
 ```bash
-uv run relevancy show relevance-reranker-cascade                # the steps, and which are paid
-uv run relevancy run relevance-reranker-cascade            # dry run
+uv run relevancy run relevance-reranker-cascade          # dry run
 uv run relevancy run relevance-reranker-cascade --yes
 ```
 
-The ensembles run first and cost nothing; if they already answer the question, stop there.
+Run `ensembles` first; it costs nothing, and if it already answers the question, stop there. The paid steps save each query as it finishes, so a rerun resumes.
 
 ## Needs
 

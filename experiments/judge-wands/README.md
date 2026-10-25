@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | WANDS (MIT): 480 queries, 42,994 products, 233,448 labels | a few million embedding tokens; a few thousand Jev requests | turbopuffer, TypeSafe |
+| Ready, not yet run | WANDS (MIT): 480 queries, 42,994 products, 233,448 labels | a few million embedding tokens; a few thousand Jev requests; four rerankers over 380 queries | turbopuffer, TypeSafe |
 
 This is the first question a prospect who isn't Amazon asks, and WANDS answers it on data anyone can use commercially. It also labels many products per query, so far fewer results go unlabeled than on ESCI.
 
@@ -21,17 +21,18 @@ Fixed before the run, against step 8 on ESCI (tau 0.857, interval 0.714 to 1.000
 - **Fails** if tau is under 0.60 or kappa under 0.30.
 - Anything between is a partial result, reported as such.
 
+Tau uses step 8's selection of runs (the latest of each retriever and reranker on the sample), leaves out runs a Jev model reranked, since Jev would be grading its own output, and averages each run over the queries both label sets can score.
+
 Tau comes first, because it doesn't depend on how many grade levels there are. Kappa across a 3-level and a 4-level scale is only roughly comparable.
 
 ## Run
 
 ```bash
-uv run relevancy show judge-wands                # the steps, and which are paid
 uv run relevancy run judge-wands            # dry run
 uv run relevancy run judge-wands --yes
 ```
 
-This runs the whole pipeline on WANDS as dataset `wands`, and needs no ESCI base.
+This runs the whole pipeline on WANDS as dataset `wands`, and needs no ESCI base. The rerank steps call Voyage, Cohere, and zerank-2 through turbopuffer; `uv run relevancy pipeline check-setup` confirms access first.
 
 ## Needs
 

@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | BRIGHT: biology, economics, LeetCode | small for Jev; the reasoning LLM is the cost | TypeSafe, OpenRouter |
+| Ready, not yet run | BRIGHT: biology, economics, LeetCode | Jev over 100 documents a query; 100 reasoning-model calls a query for the ceiling, 20 for the cascade | turbopuffer, TypeSafe, OpenRouter |
 
 Three domains, chosen in advance, covering science, social science, and code.
 
@@ -19,18 +19,17 @@ Three domains, chosen in advance, covering science, social science, and code.
 
 ## What counts
 
-The share of the reasoning LLM's gain the cascade keeps, per domain, with its cost per query: (cascade - BM25) / (LLM - BM25). Compare per domain only. The published averages (Rank1-32B 29.4, leaderboard 41 to 46) cover all 12 domains and don't compare with three.
+The share of the reasoning LLM's gain the cascade keeps, per domain, with its cost per query: (cascade - BM25) / (LLM - BM25). It's reported with a bootstrap interval over queries, and with a count of LLM calls that failed. Compare per domain only. The published averages (Rank1-32B 29.4, leaderboard 41 to 46) cover all 12 domains and don't compare with three.
 
 ## Run
 
 ```bash
-uv run relevancy show benchmark-bright                # the steps, and which are paid
 uv run relevancy run benchmark-bright            # dry run
 uv run relevancy run benchmark-bright --yes
 ```
 
-Needs the `studies` extra. `llm` is the costly step; pass `--limit` to the script by hand to try a few queries first.
+The reasoning model defaults to `openai/o4-mini` (`REASONING_MODEL`). `llm` is the costly step; pass `--limit` to the script by hand to try a few queries first.
 
 ## Needs
 
-`xlangai/BRIGHT` from Hugging Face. The benchmark is CC BY 4.0; its StackExchange text is CC BY-SA.
+`xlangai/BRIGHT` from Hugging Face, through the `studies` extra. The benchmark is CC BY 4.0; its StackExchange text is CC BY-SA.

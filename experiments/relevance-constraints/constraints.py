@@ -21,6 +21,7 @@ automated here.
 """
 
 import argparse
+import csv
 import json
 import os
 import random
@@ -86,24 +87,35 @@ def run_check(args):
     with read_only() as con:
         hybrid = run_lists(con, latest_run(con))
         texts = doc_texts(con, [d for v in hybrid.values() for d, _ in v])
-    judge, rows = jev.client(), []
-    for qid, cs in constraints.items():
-        if not cs or qid not in hybrid:
-            continue
-        qs = {(d, i): Noul(instructions=question(c, texts.get(d, ""))) for d, _ in hybrid[qid] for i, c in enumerate(cs)}
-        answers = jev.ask(judge, "Check products against a shopper's stated requirements.", qs)
-        for (d, i), a in answers.items():
-            p = jev.yes_probability(a)
-            met = 1 - p if cs[i]["type"] == "excludes" else p
-            rows.append({"query_id": qid, "doc_id": d, "constraint": i, "type": cs[i]["type"], "p_met": round(met, 4)})
+    path = DATA / "checks.csv"
+    done = {r["query_id"] for r in read_csv(path)} if path.exists() else set()
     DATA.mkdir(parents=True, exist_ok=True)
-    write_csv(DATA / "checks.csv", rows)
+    judge = jev.client()
+    with open(path, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["query_id", "doc_id", "constraint", "type", "p_met"])
+        if not done:
+            w.writeheader()
+        for qid, cs in constraints.items():
+            if not cs or qid not in hybrid or qid in done:
+                continue
+            qs = {(d, i): Noul(instructions=question(c, texts.get(d, "")))
+                  for d, _ in hybrid[qid] for i, c in enumerate(cs)}
+            answers = jev.ask(judge, "Check products against a shopper's stated requirements.", qs)
+            if len(answers) < len(qs):
+                print(f"  query {qid}: {len(qs) - len(answers)} checks unanswered; rerun `check` to retry it")
+                continue  # all of a query's checks or none, so a rerun redoes it cleanly
+            for (d, i), a in answers.items():
+                p = jev.yes_probability(a)
+                met = 1 - p if cs[i]["type"] == "excludes" else p
+                w.writerow({"query_id": qid, "doc_id": d, "constraint": i, "type": cs[i]["type"], "p_met": round(met, 4)})
+            f.flush()  # one query at a time, so a failure keeps what's paid for
 
 
 def normalized(pairs):
+    """Scores onto [0.1, 1], so even a query's lowest-scored product can still be moved by its checks."""
     s = [x for _, x in pairs if x is not None]
     lo, hi = (min(s), max(s)) if s else (0.0, 1.0)
-    return {d: ((x - lo) / (hi - lo) if hi > lo else 0.5) if x is not None else 0.0 for d, x in pairs}
+    return {d: (0.1 + 0.9 * (x - lo) / (hi - lo) if hi > lo else 0.5) if x is not None else 0.0 for d, x in pairs}
 
 
 def run_report(args):
@@ -117,7 +129,11 @@ def run_report(args):
         bases = {"voyage": run_lists(con, latest_run(con, reranker="voyage/rerank-3")),
                  "jev": run_lists(con, latest_run(con, reranker="jev:jev-1.13.0"))}
     queries = sorted(checks)
-    held, tune = {q for q in queries if not tune_half(q)}, {q for q in queries if tune_half(q)}
+    # Human labels are often wrong on exclusions (judge-negation-audit), so those queries stay out
+    # of the headline and get their own line.
+    negation = {q for q in queries if "excludes" in types[q]}
+    held = {q for q in queries if not tune_half(q) and q not in negation}
+    tune = {q for q in queries if tune_half(q) and q not in negation}
 
     def multiply(base, q):
         s = normalized(base[q])
@@ -132,11 +148,17 @@ def run_report(args):
         lam = max(LAMBDAS, key=lambda x: mean(per_query({q: penalty(base, q, x) for q in tune if q in base}, human)))
         mult = {q: multiply(base, q) for q in queries if q in base}
         pen = {q: penalty(base, q, lam) for q in queries if q in base}
-        print(f"\n## {name} + checks, held-out half ({len(held)} queries with a constraint)")
-        for label, ranked in (("multiply", mult), (f"penalty, lambda {lam}", pen)):
-            print(f"  {label:<20} nDCG@10   {compare(per_query(ranked, human, only=held), per_query(alone, human, only=held))}")
-            print(f"  {'':<20} condensed {compare(per_query(ranked, human, 'condensed', held), per_query(alone, human, 'condensed', held))}")
-        print("  by constraint type (multiply, all queries with that type):")
+        print(f"\n## {name} + checks, held-out half ({len(held)} queries with a constraint, exclusions left out)")
+        # multiply is the primary variant, fixed in advance; penalty is exploratory.
+        for label, ranked in (("multiply (primary)", mult), (f"penalty, lambda {lam} (exploratory)", pen)):
+            print(f"  {label:<34} nDCG@10   {compare(per_query(ranked, human, only=held), per_query(alone, human, only=held))}")
+            print(f"  {'':<34} condensed {compare(per_query(ranked, human, 'condensed', held), per_query(alone, human, 'condensed', held))}")
+        neg_held = {q for q in negation if not tune_half(q)}
+        if neg_held:
+            print(f"  exclusion queries, held-out ({len(neg_held)}), multiply: "
+                  f"{compare(per_query(mult, human, only=neg_held), per_query(alone, human, only=neg_held))}"
+                  "  (human labels unreliable here; see judge-negation-audit)")
+        print("  by constraint type (multiply, all queries with that type; descriptive):")
         for t in TYPES:
             qs = {q for q in queries if t in types[q]}
             if qs:
@@ -155,15 +177,25 @@ def run_nevir(args):
     from datasets import load_dataset  # the `studies` extra
 
     rows = load_dataset("orionweller/NevIR", "test")["test"]
-    rubric, judge, out = load("generic"), jev.client(), []
+    rubric, judge = load("generic"), jev.client()
+    path = OUT / "nevir.jsonl"  # one line per pair as it's graded, so a rerun resumes
+    out = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    seen = {r["pair"] for r in out}
+    OUT.mkdir(parents=True, exist_ok=True)
+    log = open(path, "a")  # noqa: SIM115  (kept open for the loop)
     for i, r in enumerate(rows):
+        if i in seen:
+            continue
         # Two queries, two documents: q1 should rank doc1 first, q2 doc2.
         g1 = jev.grade_products(judge, r["q1"], {"doc1": r["doc1"], "doc2": r["doc2"]}, rubric)
         g2 = jev.grade_products(judge, r["q2"], {"doc1": r["doc1"], "doc2": r["doc2"]}, rubric)
         correct = g1["doc1"].expected > g1["doc2"].expected and g2["doc2"].expected > g2["doc1"].expected
-        out.append({"pair": i, "q1_doc1": g1["doc1"].expected, "q1_doc2": g1["doc2"].expected,
-                    "q2_doc1": g2["doc1"].expected, "q2_doc2": g2["doc2"].expected, "correct": correct})
-    write_csv(OUT / "nevir.csv", out)
+        row = {"pair": i, "q1_doc1": g1["doc1"].expected, "q1_doc2": g1["doc2"].expected,
+               "q2_doc1": g2["doc1"].expected, "q2_doc2": g2["doc2"].expected, "correct": correct}
+        out.append(row)
+        log.write(json.dumps(row) + "\n")
+        log.flush()
+    log.close()
     acc = [float(r["correct"]) for r in out]
     rnd = random.Random(0)
     means = sorted(sum(rnd.choices(acc, k=len(acc))) / len(acc) for _ in range(1000))

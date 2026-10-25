@@ -67,7 +67,9 @@ def ask(jev: TypeSafeClient, state: str, questions: dict[str, object], model: st
     """Ask any typed questions (Noul, Choice, Score) about one state, PER_REQUEST to a request.
 
     Keys of `questions` are yours; they come back as the keys of the answers, each the
-    answer's dict (for Noul and Choice, `probabilities` holds the distribution).
+    answer's dict: Noul answers carry `noul` (P(yes)), Choice and Score answers `probabilities`.
+    A request that fails after the SDK's retries loses only its own questions: their keys are
+    missing from the result, and a count is printed, so a long paid job keeps what it has.
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -79,10 +81,19 @@ def ask(jev: TypeSafeClient, state: str, questions: dict[str, object], model: st
         answers = resp.model_dump()["answers"]
         return {key: answers[f"q{n}"] for n, (key, _) in enumerate(part)}
 
+    def safe(start: int) -> dict[str, dict]:
+        try:
+            return chunk(start)
+        except Exception as e:  # noqa: BLE001  (keep the other chunks' paid answers)
+            print(f"  warning: a Jev request failed ({str(e)[:120]}); its questions get no answer", flush=True)
+            return {}
+
     out: dict[str, dict] = {}
     with ThreadPoolExecutor(workers) as pool:
-        for part in pool.map(chunk, range(0, len(items), PER_REQUEST)):
+        for part in pool.map(safe, range(0, len(items), PER_REQUEST)):
             out |= part
+    if len(out) < len(items):
+        print(f"  {len(items) - len(out):,} of {len(items):,} questions unanswered", flush=True)
     return out
 
 

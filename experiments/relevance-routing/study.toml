@@ -1,5 +1,5 @@
 title = "Query routing by query type"
-premise = "Different query types want different retrieval settings."
+premise = "Routing each query type to its own retrieval setting beats the best single setting."
 status = "ready"
 rank = 10
 keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]

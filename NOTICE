@@ -53,7 +53,7 @@ governed by its own terms. Studies marked [restricted] have terms that may
 limit commercial use; read them before using results in commercial
 material.
 
-  Google Product Taxonomy (studies: relevance-ontology)
+  Google Product Taxonomy (studies: relevance-ontology) [restricted]
       Google's terms; no open license stated.
       https://support.google.com/merchants/answer/6324436
 
@@ -77,7 +77,7 @@ material.
   each scenario has its own source terms]
       https://github.com/skddj/sembench
 
-  STaRK (benchmark-instructions-stark)
+  STaRK (benchmark-instructions-stark) [restricted: data terms not stated]
       Code MIT; the Amazon knowledge base's terms are not stated.
       https://github.com/snap-stanford/stark
 
@@ -87,7 +87,8 @@ material.
       https://github.com/orionw/FollowIR
 
   BRIGHT (benchmark-bright)
-      CC BY 4.0. https://github.com/xlang-ai/BRIGHT
+      CC BY 4.0 for the benchmark; its StackExchange text is CC BY-SA.
+      https://github.com/xlang-ai/BRIGHT
 
 Licenses were checked in October 2026 and can change; the source is
 authoritative.

@@ -128,23 +128,47 @@ class FakeTp:
     def _rank(self, ns, rank_by, filters, k, salt=""):
         pool = list(self.attrs[ns]) if ns in self.attrs and not ns.startswith("esci") else self.docs
         hits = [d for d in pool if self._match(ns, d, filters)]
-        key = json.dumps(rank_by, default=str) + salt
-        hits.sort(key=lambda d: h(key, d))
+        key = json.dumps(rank_by, default=str)
+        if "BM25" in key:
+            # Real BM25 only returns documents that share a term with the query.
+            hits = [d for d in hits if h("terms", key, d) < 0.6]
+        hits.sort(key=lambda d: h(key + salt, d))
         hits = hits[:k]
+        n = len(hits) + 1
+        # turbopuffer's score is $dist: a distance for ANN (lower is better), a BM25 score otherwise.
+        ann = isinstance(rank_by, (list, tuple)) and len(rank_by) > 1 and rank_by[1] == "ANN"
+        scores = [i / n for i in range(1, n)] if ann else [1 - i / n for i in range(len(hits))]
         return pa.table({"id": pa.array(hits, pa.string()), "rank": pa.array(range(1, len(hits) + 1), pa.int64()),
-                         "score": pa.array([1 - i / (len(hits) + 1) for i in range(len(hits))], pa.float64())})
+                         "score": pa.array(scores, pa.float64())})
 
     def query(self, ns, rank_by, top_k=10, filters=None, rerank_by=None, include=None, run_id=None, query_id=None):
         self._log(run_id, query_id)
         return self._rank(ns, rank_by, filters, top_k, json.dumps(rerank_by, default=str))
 
     def multi_query(self, ns, queries, rerank_by=None, limit=None, include=None, run_id=None, query_id=None):
+        # The same checks tpuf-arrow makes before sending (client.py: max_concurrency, limit without rerank_by).
+        if len(queries) > 8:
+            raise ValueError(f"multi_query got {len(queries)} queries; the client allows at most 8")
+        if limit is not None and rerank_by is None:
+            raise ValueError("limit only applies with rerank_by")
         self._log(run_id, query_id)
+        tables = [self._rank(ns, q["rank_by"], q.get("filters"), q.get("top_k", 10)) for q in queries]
+        if rerank_by is None:
+            return tables  # one table per subquery, unfused
+        if isinstance(rerank_by, dict):  # a hosted model over the union
+            ids = sorted({d for t in tables for d in t["id"].to_pylist()}, key=lambda d: h(rerank_by.get("model"), d))
+            ids = ids[:limit]
+            return [pa.table({"id": pa.array(ids, pa.string()), "rank": pa.array(range(1, len(ids) + 1), pa.int64()),
+                              "score": pa.array([1 - i / (len(ids) + 1) for i in range(len(ids))], pa.float64())})]
+        params = rerank_by[1] if len(rerank_by) > 1 else {}
+        weights = params.get("weights") or [1.0] * len(tables)
+        assert len(weights) == len(tables), "RRF needs one weight per subquery"
+        k = params.get("rank_constant", 60)
         fused: dict[str, float] = {}
-        for q in queries:
-            for i, d in enumerate(self._rank(ns, q["rank_by"], q.get("filters"), q.get("top_k", 10))["id"].to_pylist()):
-                fused[d] = fused.get(d, 0) + 1 / (61 + i)
-        ids = sorted(fused, key=lambda d: (-fused[d], d))[:limit]
+        for w, t in zip(weights, tables):
+            for i, d in enumerate(t["id"].to_pylist()):
+                fused[d] = fused.get(d, 0) + w / (k + i + 1)
+        ids = sorted(fused, key=lambda d: (fused[d], d), reverse=True)[:limit]
         return [pa.table({"id": pa.array(ids, pa.string()), "rank": pa.array(range(1, len(ids) + 1), pa.int64()),
                           "score": pa.array([fused[d] for d in ids], pa.float64())})]
 
@@ -177,7 +201,7 @@ class FakeJev:
             if d["type"] == "score":
                 n = len(d["criteria"])
                 w = [h(seed, i) + 0.05 for i in range(n)]
-                probs = {str(i): x / sum(w) for i, x in enumerate(w)}
+                probs = {i: x / sum(w) for i, x in enumerate(w)}  # the SDK keys Score probabilities by int
                 answers[key] = {"type": "score", "probabilities": probs,
                                 "score": sum(i * p for i, p in enumerate(probs.values()))}
             elif d["type"] == "choice":

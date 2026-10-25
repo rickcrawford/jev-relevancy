@@ -31,6 +31,7 @@ is a separate, deliberate step (see .claude/skills/run-study/SKILL.md).
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import shlex
@@ -57,21 +58,42 @@ BASE = [
      "uv run relevancy pipeline prepare", False),
     ("full namespace loaded and searched (hybrid-rrf on esci-us-full)", lambda con: _run_exists(
         con, "retriever = 'hybrid-rrf' AND reranker = 'none'"),
-     "uv run relevancy pipeline load --scope full && uv run relevancy pipeline search --scope full", True),
-    ("Voyage rerank of hybrid", lambda con: _run_exists(con, "reranker = 'voyage/rerank-3'"),
-     "uv run relevancy pipeline rerank --model voyage/rerank-3", True),
-    ("Jev rerank of hybrid", lambda con: _run_exists(con, "reranker = 'jev:jev-1.13.0'"),
-     "uv run relevancy pipeline rerank --model jev:jev-1.13.0", True),
-    ("Jev grades for every run's top 10 (step 8)", lambda con: con.execute(
-        "SELECT count(*) FROM judgments WHERE dataset = 'esci-us' AND source = 'jev-batched:jev-1.13.0'"
-    ).fetchone()[0] > 0,
-     "uv run relevancy pipeline judge-runs --judge jev-batched:jev-1.13.0", True),
+     "uv run relevancy pipeline load --scope full --yes && uv run relevancy pipeline search --scope full --yes", True),
+    # Step 6 reranks the latest hybrid run on the sample, which could be a smoke run, so pin the full one.
+    ("Voyage rerank of the full hybrid run", lambda con: _run_exists(con, "reranker = 'voyage/rerank-3'"),
+     "uv run relevancy pipeline rerank --yes --model voyage/rerank-3 --base-run $(uv run relevancy latest-run)", True),
+    ("Jev rerank of the full hybrid run", lambda con: _run_exists(con, "reranker = 'jev:jev-1.13.0'"),
+     "uv run relevancy pipeline rerank --yes --model jev:jev-1.13.0 --base-run $(uv run relevancy latest-run)", True),
+    ("Jev grades for the top 10 of every latest full run (step 8)", lambda con: _all_graded(con),
+     "uv run relevancy pipeline judge-runs --yes --judge jev-batched:jev-1.13.0", True),
 ]
+FULL = """dataset = 'esci-us' AND config->>'namespace' = 'esci-us-full'
+          AND config->>'sample' = (SELECT count(*) || '-' || (hash(string_agg(query_id, ',' ORDER BY query_id)) % 1000000)
+                                   FROM queries WHERE dataset = 'esci-us' AND sampled)"""
 
 
 def _run_exists(con, where: str) -> bool:
-    return con.execute(f"""SELECT count(*) FROM runs WHERE dataset = 'esci-us'
-                           AND config->>'namespace' = 'esci-us-full' AND {where}""").fetchone()[0] > 0
+    """A run on the full namespace and the current query sample (the fingerprint is warehouse.sample_id's)."""
+    return con.execute(f"SELECT count(*) FROM runs WHERE {FULL} AND {where}").fetchone()[0] > 0
+
+
+def _latest_full_runs(con) -> list[str]:
+    return [r[0] for r in con.execute(f"""
+        SELECT run_id FROM runs WHERE {FULL}
+        QUALIFY row_number() OVER (PARTITION BY retriever, reranker ORDER BY started_at DESC) = 1""").fetchall()]
+
+
+def _all_graded(con) -> bool:
+    """Every top-10 product of the latest full runs has a Jev grade, not just some of them."""
+    runs = _latest_full_runs(con)
+    if not runs:
+        return False
+    total, ungraded = con.execute("""
+        SELECT count(*), count(*) FILTER (WHERE j.doc_id IS NULL)
+        FROM (SELECT DISTINCT query_id, doc_id FROM results WHERE run_id IN (SELECT unnest(?)) AND rank <= 10) r
+        LEFT JOIN judgments j ON j.dataset = 'esci-us' AND j.source = 'jev-batched:jev-1.13.0'
+                             AND j.query_id = r.query_id AND j.doc_id = r.doc_id""", [runs]).fetchone()
+    return total > 0 and ungraded == 0
 
 
 def studies() -> dict[str, dict]:
@@ -117,18 +139,23 @@ def base_status() -> list[dict]:
     return out
 
 
-def check(s: dict, scope: str | None = None) -> dict:
+def check(s: dict, scope: str | None = None, steps: list[dict] | None = None) -> dict:
+    steps = s.get("steps", []) if steps is None else steps
     keys = {k: bool(os.environ.get(k)) for k in s.get("keys", [])}
     files = {f: (ROOT / f).exists() for f in s.get("files", [])}
-    # A smoke-scope pilot runs on the quick start's namespace, not the full base.
-    base = base_status() if s.get("base", True) and scope != "smoke" else []
+    modules = {m: importlib.util.find_spec(m) is not None for st in steps for m in st.get("modules", [])}
+    # A smoke pilot runs on the quick start's namespace, so it skips the full base, but only
+    # when every selected step really runs on smoke.
+    smoke = scope == "smoke" and steps and all(st.get("scoped") for st in steps)
+    base = base_status() if s.get("base", True) and not smoke else []
     missing = ([f"env {k}" for k, ok in keys.items() if not ok]
                + [f"file {f}" for f, ok in files.items() if not ok]
+               + [f"python module {m} (uv sync --extra studies)" for m, ok in modules.items() if not ok]
                + [f"base: {b['item']}" for b in base if not b["ok"]])
     if s["status"] == "planned":
         missing.append("no script yet: implement it from the README first")
     return {"study": s["folder"], "ready": not missing, "missing": missing, "keys": keys, "files": files,
-            "base": base}
+            "modules": modules, "base": base}
 
 
 # -- running ------------------------------------------------------------------
@@ -137,13 +164,35 @@ def run_steps(s: dict, steps: list[dict], yes: bool, label: str) -> int:
     results = EXP / s["folder"] / s.get("results", "results")
     record = {"study": s["folder"], "label": label, "commit": git_sha(),
               "started": datetime.now(UTC).isoformat(timespec="seconds"), "steps": []}
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f") + f"-{os.getpid()}"
     paid = [st["name"] for st in steps if st.get("paid", True)]
     if not yes:
         print(f"Dry run of {s['folder']}. Add --yes to run" + (f"; paid steps: {', '.join(paid)}" if paid else "") + ".")
         for st in steps:
             print(f"  [{st['name']}] {'paid ' if st.get('paid', True) else 'free '} {st['run']}"
                   + (f"  > {st['output']}" if st.get("output") else ""))
+            if st.get("note"):
+                print(f"      note: {st['note']}")
         return 0
+    try:
+        _run(s, steps, results, record)
+    except KeyboardInterrupt:
+        record["interrupted"] = True
+        print("\nInterrupted.")
+    record["finished"] = datetime.now(UTC).isoformat(timespec="seconds")
+    record["ok"] = (not record.get("interrupted") and len(record["steps"]) == len(steps)
+                    and all(st["exit"] == 0 for st in record["steps"]))
+    runs = results / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    path = runs / f"{stamp}.json"
+    path.write_text(json.dumps(record, indent=2) + "\n")
+    print(f"\nRun record: {path.relative_to(ROOT)}")
+    if record["ok"] and s.get("decide"):
+        print(f"\nNow compare the output with the pass mark (README, \"What counts\"):\n  {s['decide']}")
+    return 0 if record["ok"] else 1
+
+
+def _run(s: dict, steps: list[dict], results: Path, record: dict) -> None:
     for st in steps:
         print(f"\n== {s['folder']}: {st['name']}\n$ {st['run']}", flush=True)
         started = time.monotonic()
@@ -162,20 +211,10 @@ def run_steps(s: dict, steps: list[dict], yes: bool, label: str) -> int:
         if code:
             print(f"\nStep {st['name']} failed with exit code {code}. Later steps didn't run.")
             break
-    record["finished"] = datetime.now(UTC).isoformat(timespec="seconds")
-    record["ok"] = all(st["exit"] == 0 for st in record["steps"]) and len(record["steps"]) == len(steps)
-    runs = results / "runs"
-    runs.mkdir(parents=True, exist_ok=True)
-    path = runs / f"{record['started'].replace(':', '')}.json"
-    path.write_text(json.dumps(record, indent=2) + "\n")
-    print(f"\nRun record: {path.relative_to(ROOT)}")
-    if record["ok"] and s.get("decide"):
-        print(f"\nNow compare the output with the pass mark (README, \"What counts\"):\n  {s['decide']}")
-    return 0 if record["ok"] else 1
 
 
-def last_run(folder: str) -> dict | None:
-    runs = sorted((EXP / folder / "results" / "runs").glob("*.json"))
+def last_run(s: dict) -> dict | None:
+    runs = sorted((EXP / s["folder"] / s.get("results", "results") / "runs").glob("*.json"))
     return json.loads(runs[-1].read_text()) if runs else None
 
 
@@ -201,6 +240,8 @@ def cmd_show(args):
     print("\nSteps:" if s.get("steps") else "\nSteps: none yet (planned). The README says what to build.")
     for st in s.get("steps", []):
         print(f"  {st['name']:<12} {'paid' if st.get('paid', True) else 'free'}  {st['run']}")
+        if st.get("note"):
+            print(f"  {'':<12}       note: {st['note']}")
     print(f"\nWhat counts: {s.get('decide', 'see README')}\nREADME: experiments/{s['folder']}/README.md")
 
 
@@ -245,10 +286,12 @@ def cmd_run(args):
             raise SystemExit(f"Unknown step {args.from_step}. Steps: {', '.join(names)}")
         steps = steps[names.index(args.from_step):]
     if args.scope:
+        if not any(st.get("scoped") for st in steps):
+            raise SystemExit(f"None of these steps takes --scope; {s['folder']} runs on the full namespace.")
         steps = [st | {"run": f"{st['run']} --scope {shlex.quote(args.scope)}"} if st.get("scoped") else st
                  for st in steps]
     if args.yes:
-        c = check(s, args.scope)
+        c = check(s, args.scope, steps)
         if not c["ready"]:
             raise SystemExit("Not ready: " + "; ".join(c["missing"]))
     return run_steps(s, steps, args.yes, "run")
@@ -257,7 +300,7 @@ def cmd_run(args):
 def cmd_status(args):
     rows = []
     for k, s in studies().items():
-        r = last_run(k)
+        r = last_run(s)
         rows.append({"study": k, "status": s["status"], "last_run": r and r["started"], "ok": r and r["ok"],
                      "commit": r and r["commit"]})
     if args.json:
@@ -267,6 +310,8 @@ def cmd_status(args):
         print(f"{r['study']:<30} {r['status']:<8} {last}")
 
 
+# Pipeline steps that call turbopuffer, Jev, or an LLM, so they need --yes like a study's paid steps.
+PAID_PIPELINE = {"load", "search", "rerank", "bakeoff", "judge-runs"}
 PIPELINE = {
     "check-setup": "scripts/00_check_setup.py",
     "download": "scripts/01_download_esci.sh",
@@ -282,9 +327,24 @@ PIPELINE = {
 
 
 def cmd_pipeline(args, extra):
+    if args.step in PAID_PIPELINE and not args.yes:
+        raise SystemExit(f"`pipeline {args.step}` calls paid services. Add --yes to run it.")
     script = PIPELINE[args.step]
     cmd = [str(ROOT / script)] if script.endswith(".sh") else [sys.executable, str(ROOT / script)]
     return subprocess.call(cmd + extra, cwd=ROOT)
+
+
+def cmd_latest_run(args, extra):
+    """The latest plain hybrid run on the full namespace and current sample, for step 6's --base-run."""
+    import duckdb
+    db = Path(os.environ.get("RELEVANCY_DB", ROOT / "warehouse" / "relevancy.duckdb"))
+    with duckdb.connect(str(db), read_only=True) as con:
+        row = con.execute(f"""SELECT run_id FROM runs WHERE {FULL} AND retriever = 'hybrid-rrf' AND reranker = 'none'
+                              ORDER BY started_at DESC LIMIT 1""").fetchone()
+    if row is None:
+        raise SystemExit("No hybrid-rrf run on esci-us-full for the current sample.")
+    print(row[0])
+    return 0
 
 
 def cmd_evidence(args, extra):
@@ -292,12 +352,16 @@ def cmd_evidence(args, extra):
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="relevancy", description=__doc__,
+    ap = argparse.ArgumentParser(prog="relevancy", description=__doc__, allow_abbrev=False,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="command", required=True)
+    _add = sub.add_parser
+    sub.add_parser = lambda *a, **k: _add(*a, allow_abbrev=False, **k)  # no --y meaning --yes
     p = sub.add_parser("pipeline", help="run a numbered step in scripts/; extra args pass through")
     p.add_argument("step", choices=PIPELINE)
+    p.add_argument("--yes", action="store_true", help="needed for steps that call paid services")
     sub.add_parser("evidence", help="recompute the numbers in docs/results.md")
+    sub.add_parser("latest-run", help="the latest hybrid run on the full namespace (for --base-run)")
     for name in ("list", "status"):
         p = sub.add_parser(name)
         p.add_argument("--json", action="store_true")
@@ -321,6 +385,8 @@ def main() -> int:
         return cmd_pipeline(args, extra)
     if args.command == "evidence":
         return cmd_evidence(args, extra)
+    if args.command == "latest-run":
+        return cmd_latest_run(args, extra)
     if extra:
         ap.error(f"unrecognized arguments: {' '.join(extra)}")
     handler = {"list": cmd_list, "show": cmd_show, "check": cmd_check, "base": cmd_base,

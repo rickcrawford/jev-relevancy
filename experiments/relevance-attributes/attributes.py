@@ -88,9 +88,13 @@ def run_label(args):
         chunk = ids[i:i + CHUNK]
         with read_only() as con:
             texts = doc_texts(con, chunk)
+        missing = [d for d in chunk if not texts.get(d)]
+        if missing:
+            print(f"  {len(missing)} products have no text in the warehouse; skipped", flush=True)
         answers = jev.ask(judge, "Label products in a shopping catalogue.",
-                          {d: Noul(instructions=f"{question}\n\nProduct: {texts.get(d, '')}") for d in chunk})
-        write_part(folder, [{"id": d, "p": jev.yes_probability(answers[d])} for d in chunk], SCHEMA)
+                          {d: Noul(instructions=f"{question}\n\nProduct: {texts[d]}") for d in chunk if texts.get(d)})
+        # Unanswered products aren't written, so the next run retries them.
+        write_part(folder, [{"id": d, "p": jev.yes_probability(a)} for d, a in answers.items()], SCHEMA)
         print(f"  {len(done) + i + len(chunk):,} labeled", flush=True)
 
 
@@ -127,10 +131,20 @@ def run_precision(args):
     precision = sum(yes_rated) / len(yes_rated)
     missed_rate = sum(no_rated) / len(no_rated) if no_rated else 0.0
     est_recall = precision * n_yes / (precision * n_yes + missed_rate * n_no) if n_yes else float("nan")
-    print(f"  precision {precision:.2f} on {len(yes_rated)} Jev-yes products; "
+    lo, hi = wilson(sum(yes_rated), len(yes_rated))
+    print(f"  precision {precision:.2f} [{lo:.2f}, {hi:.2f}] on {len(yes_rated)} Jev-yes products; "
           f"{missed_rate:.0%} of {len(no_rated)} Jev-no products were rated yes; estimated recall {est_recall:.2f}")
     if precision < 0.9:
-        print("  Precision is under 0.9. Stop: filtering on these labels would do more harm than good.")
+        # The README's rule. Exiting non-zero stops `relevancy run` before the paid patch.
+        raise SystemExit("  Precision is under 0.9. Stop: filtering on these labels would do more harm than good.")
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    if not n:
+        return float("nan"), float("nan")
+    p = k / n
+    centre, half = (p + z * z / (2 * n)), z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5)
+    return (centre - half) / (1 + z * z / n), (centre + half) / (1 + z * z / n)
 
 
 def run_patch(args):

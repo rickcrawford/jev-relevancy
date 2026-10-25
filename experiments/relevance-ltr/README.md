@@ -4,14 +4,14 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | ESCI train split (training); the 500 test queries (scoring) | retrieval plus Voyage and Jev for 5,000 train queries and the 500 test queries at depth 100 | turbopuffer, TypeSafe |
+| Ready, not yet run | ESCI train split (training); the 500 test queries (scoring) | per query: 6 turbopuffer requests (candidates, four score lookups, Voyage) and 2 Jev requests; about 33k and 11k for 5,500 queries | turbopuffer, TypeSafe |
 
 ## Method
 
 1. Load 5,000 train queries, stratified by slice. The raw ESCI file has them; `02_prepare_esci.py` only loads test queries.
-2. **Features** for each (query, product) in the hybrid top 100: vector distance; BM25 on title, body, and title only; RRF rank; Voyage's score; Jev's four grade probabilities; brand and color match; title word overlap. Most of these aren't stored, so collect them with new requests: per-field BM25 and vector scores for every candidate, Voyage and Jev at depth 100, and Jev's full probabilities (the warehouse keeps only the top grade and the expected grade). A feature a list didn't return gets a missing-value flag, not a zero.
+2. **Features** for each (query, product) in the hybrid top 100: vector distance; three BM25 scores (title twice plus body, title, body); RRF rank; Voyage's score; Jev's four grade probabilities; brand and color match; title word overlap. None of this is stored at depth 100, so it's all fetched. A product a BM25 field doesn't match gets a missing-value flag, not a zero.
 3. Train LightGBM LambdaRank on train only, with hyperparameters from cross-validation on train.
-4. Ablations: without Jev, without Voyage, without both. Then the same model trained on Jev's grades instead of the human ones.
+4. Ablations: without Jev, without Voyage, without both. Then a model trained on Jev's grades instead of the human ones, without Jev's features, since the labels are their argmax and it would just relearn Jev.
 
 ## What counts
 
@@ -24,14 +24,13 @@ ESCI labels about 20 products a query, so training treats most candidates as irr
 ## Run
 
 ```bash
-uv run relevancy show relevance-ltr                # the steps, and which are paid
-uv run relevancy run relevance-ltr            # dry run
+uv run relevancy run relevance-ltr          # dry run
 uv run relevancy run relevance-ltr --yes
 ```
 
-Needs the `studies` extra (`uv sync --extra studies`) for LightGBM, and the raw ESCI download for the train split.
+`features` saves every 100 queries, so a rerun resumes.
 
 ## Needs
 
 - `uv sync --extra studies` for LightGBM.
-- The raw ESCI files from `uv run relevancy pipeline download`.
+- The raw ESCI files, from `uv run relevancy pipeline download`.

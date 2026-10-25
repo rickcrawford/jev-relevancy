@@ -57,16 +57,17 @@ def run_load(args):
         corpus = {str(r.get("_id", r.get("id"))): (r.get("title") or "") + " " + r["text"]
                   for r in _load(path, "corpus", rev)}
         queries = {str(r.get("_id", r.get("id"))): r["text"] for r in _load(path, "queries", rev)}
-        instructions = {r["query-id"]: r["instruction"] for r in _load(path, "instruction", rev)}
-        top = {r["query-id"]: list(r["corpus-ids"]) for r in _load(path, "top_ranked", rev)}
+        # Ids as strings, as MTEB casts them; otherwise int ids never match and p-MRR comes out 0.
+        instructions = {str(r["query-id"]): r["instruction"] for r in _load(path, "instruction", rev)}
+        top = {str(r["query-id"]): [str(d) for d in r["corpus-ids"]] for r in _load(path, "top_ranked", rev)}
         try:
             qrel_rows = _load(path, "default", rev)
         except Exception:  # noqa: BLE001  (older revisions name it "qrels")
             qrel_rows = _load(path, "qrels", rev)
         qrels = defaultdict(dict)
         for r in qrel_rows:
-            qrels[r["query-id"]][r["corpus-id"]] = int(r["score"])
-        changed = {r["query-id"]: list(r["corpus-ids"]) for r in _load(path, "qrel_diff", rev)}
+            qrels[str(r["query-id"])][str(r["corpus-id"])] = int(r["score"])
+        changed = {str(r["query-id"]): [str(d) for d in r["corpus-ids"]] for r in _load(path, "qrel_diff", rev)}
         needed = {d for ids in top.values() for d in ids}
         (DATA / f"{task}.json").write_text(json.dumps({
             "queries": queries, "instructions": instructions, "top": top, "qrels": qrels, "changed": changed,

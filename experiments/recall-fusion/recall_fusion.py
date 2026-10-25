@@ -255,7 +255,11 @@ def run_check():
     print(f"local RRF against stored run {run_id}, {n} queries:")
     print(f"  top-10 overlap {sum(overlap10) / n:.3f}, top-50 overlap {sum(overlap50) / n:.3f}, "
           f"identical top 10 on {same_order} queries")
-    print("  Below about 0.95 top-50 overlap, the sweep isn't modelling the server; look at how it ranks ties first.")
+    if sum(overlap50) / n < 0.95:
+        # Exiting non-zero stops `relevancy run` before the sweep and the paid rerank.
+        raise SystemExit("  Under 0.95 top-50 overlap: the sweep isn't modelling the server. Stop, and look at how "
+                         "it ranks ties first.")
+    print("  At least 0.95 top-50 overlap: the sweep describes the server.")
 
 
 def run_sweep():
@@ -302,6 +306,8 @@ def run_rerank():
     configs = [dict(zip(GRID, values)) for values in itertools.product(*GRID.values())]
     cfg = next(c for c in configs if name(c) == best)
     ranked, tp = lists(), client()
+    # Only the held-out half is scored, so only it is reranked.
+    queries = [(q, t) for q, t in queries if not tune_half(q)]
     # "depth 100" separates the gain from more candidates alone from the gain from better fusion.
     variants = {"baseline top 50": (BASELINE, 50), "depth 100 top 100": ({**BASELINE, "depth": 100}, 100),
                 "best top 100": (cfg, 100)}

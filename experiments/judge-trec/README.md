@@ -4,7 +4,7 @@
 
 | Status | Dataset | Cost | Keys |
 | --- | --- | --- | --- |
-| Written, not run | TREC DL 2020 passage (primary); DL19 and LLMJudge (DL23) secondary | about 600 Jev requests per Jev version | TypeSafe; OpenRouter for an LLM reference |
+| Ready, not yet run; tau needs run files by hand | TREC DL 2020 passage (primary); DL19 and LLMJudge (DL23) secondary | about 250 Jev requests per Jev version | TypeSafe |
 
 **Research only.** MS MARCO's terms say "intended for non-commercial research purposes only", so get a legal review before any result goes in customer-facing material. [`judge-wands`](../judge-wands/) makes the same claim on MIT data, which is why it ranks first and this one ranks seventh.
 
@@ -16,7 +16,7 @@
 
 ## What counts
 
-One primary comparison: Kendall's tau between the system rankings on DL20, with a bootstrap interval over topics. It counts if the interval's lower bound is at or above 0.80, which puts it in UMBRELA's reported range (0.87 to 0.94 on DL19 to DL23). DL19, LLMJudge, Jev 1.13.0, kappa, and calibration error get reported, but they don't decide anything.
+One primary comparison: Kendall's tau between the system rankings on DL20, with a bootstrap interval over topics, using linear gain and ordering each run by score, as trec_eval does. It counts if the interval's lower bound is at or above 0.80, which puts it in UMBRELA's reported range (0.87 to 0.94 on DL19 to DL23). DL19, LLMJudge, Jev 1.13.0, kappa, and calibration error get reported, but they don't decide anything.
 
 ## Could mislead
 
@@ -26,7 +26,6 @@ One primary comparison: Kendall's tau between the system rankings on DL20, with 
 ## Run
 
 ```bash
-uv run relevancy show judge-trec                # the steps, and which are paid
 uv run relevancy run judge-trec            # dry run
 uv run relevancy run judge-trec --yes
 ```

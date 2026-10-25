@@ -78,7 +78,8 @@ def run_slices(args):
         winners.add(max(scores, key=scores.get))
         print(f"{s:<16} {len(qids):>4}   " + "  ".join(f"{scores[r]:>10.3f}" for r in runs))
     if len(winners) == 1:
-        print(f"\nThe same retriever ({winners.pop()}) wins every slice. Stop: there's nothing to route.")
+        # Exiting non-zero stops `relevancy run` before the paid classify and rerank steps.
+        raise SystemExit(f"\nThe same retriever ({winners.pop()}) wins every slice. Stop: there's nothing to route.")
     else:
         print(f"\nDifferent slices prefer {', '.join(sorted(winners))}, so routing might help. Go on to classify.")
 

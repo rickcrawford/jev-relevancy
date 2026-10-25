@@ -10,7 +10,10 @@ import csv
 import hashlib
 import heapq
 import math
+import os
 import random
+import time
+import uuid
 from collections import defaultdict
 from pathlib import Path
 
@@ -82,15 +85,17 @@ def gain(g: int) -> float:
     return 2 ** g - 1
 
 
-def ndcg(ranked: list[str], labels_: dict[str, int], condensed: bool = False, k: int = 10) -> float | None:
-    """nDCG@k with exponential gain. Condensed drops unlabeled results first."""
-    ideal = sorted((gain(g) for g in labels_.values()), reverse=True)[:k]
+def ndcg(ranked: list[str], labels_: dict[str, int], condensed: bool = False, k: int = 10,
+         linear: bool = False) -> float | None:
+    """nDCG@k with exponential gain (or linear, as trec_eval uses). Condensed drops unlabeled results first."""
+    gain_ = (lambda g: g) if linear else gain
+    ideal = sorted((gain_(g) for g in labels_.values()), reverse=True)[:k]
     idcg = sum(x / math.log2(i + 2) for i, x in enumerate(ideal))
     if not idcg:
         return None
     if condensed:
         ranked = [d for d in ranked if d in labels_]
-    return sum(gain(labels_.get(d, 0)) / math.log2(i + 2) for i, d in enumerate(ranked[:k])) / idcg
+    return sum(gain_(labels_.get(d, 0)) / math.log2(i + 2) for i, d in enumerate(ranked[:k])) / idcg
 
 
 def recall(ranked: list[str], labels_: dict[str, int], at: int) -> float | None:
@@ -123,9 +128,12 @@ def mean(d: dict) -> float:
 
 
 def compare(a: dict[str, float], b: dict[str, float]) -> str:
-    """'0.452 vs 0.437: +0.015 [+0.004, +0.026] n=250' for two per-query score dicts."""
+    """'0.452 vs 0.437: +0.015 [+0.004, +0.026] n=250' for two per-query score dicts, both means
+    over the queries they share, so they match the delta."""
+    both = a.keys() & b.keys()
     m, lo, hi, n = paired_delta(a, b)
-    return f"{mean(a):.3f} vs {mean(b):.3f}: {m:+.3f} [{lo:+.3f}, {hi:+.3f}] n={n}"
+    return (f"{mean({q: a[q] for q in both}):.3f} vs {mean({q: b[q] for q in both}):.3f}: "
+            f"{m:+.3f} [{lo:+.3f}, {hi:+.3f}] n={n}")
 
 
 def interval(diffs: list[float], level: float = 0.90, draws: int = 1000, seed: int = 0) -> tuple[float, float]:
@@ -136,7 +144,8 @@ def interval(diffs: list[float], level: float = 0.90, draws: int = 1000, seed: i
     rng = random.Random(seed)
     means = sorted(sum(rng.choices(diffs, k=len(diffs))) / len(diffs) for _ in range(draws))
     tail = (1 - level) / 2
-    return means[max(0, round(tail * draws) - 1)], means[min(draws - 1, round((1 - tail) * draws) - 1)]
+    lo = max(0, math.floor(tail * draws) - 1)
+    return means[lo], means[draws - 1 - lo]  # symmetric tails
 
 
 def tost(a: dict[str, float], b: dict[str, float], margin: float) -> tuple[float, float, float, int, bool]:
@@ -197,15 +206,21 @@ def part_ids(folder: Path, column: str = "id") -> set[str]:
 
 
 def write_part(folder: Path, rows: list[dict], schema: pa.Schema) -> None:
+    """Write to a temporary name, then rename, so a crash never leaves a half-written part."""
+    if not rows:
+        return
     folder.mkdir(parents=True, exist_ok=True)
-    n = len(list(folder.glob("*.parquet")))
-    pq.write_table(pa.Table.from_pylist(rows, schema=schema), folder / f"part-{n:05d}.parquet")
+    name = f"part-{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
+    tmp = folder / f"{name}.tmp"
+    pq.write_table(pa.Table.from_pylist(rows, schema=schema), tmp)
+    os.replace(tmp, folder / f"{name}.parquet")
 
 
 # -- calibration --------------------------------------------------------------
 
 def ece(probs: list[float], truth: list[bool], bins: int = 10) -> float:
     """Expected calibration error of yes-probabilities against yes/no truth."""
+    probs = [min(1.0, max(0.0, p)) for p in probs]
     total, err = len(probs), 0.0
     for b in range(bins):
         lo, hi = b / bins, (b + 1) / bins

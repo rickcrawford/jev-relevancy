@@ -109,7 +109,9 @@ def grade(http: httpx.Client, model: str, query: str, product: str, rubric: Rubr
         return _failed(error)
 
     choice = data["choices"][0]
-    probs = dict.fromkeys(GRADES, 0.0)
+    # Only the digits this rubric's scale uses, so a 3-level rubric (0, 2, 3) never yields a 1.
+    allowed = tuple(str(g) for g in rubric.grades)
+    probs = dict.fromkeys(allowed, 0.0)
     top = ((choice.get("logprobs") or {}).get("content") or [{}])[0].get("top_logprobs") or []
     for t in top:
         tok = t["token"].strip()
@@ -124,7 +126,7 @@ def grade(http: httpx.Client, model: str, query: str, product: str, rubric: Rubr
     else:
         # No usable logprobs: fall back to the text, with no probability.
         text = (choice["message"].get("content") or "").strip()[:1]
-        g = int(text) if text in GRADES else None
+        g = int(text) if text in allowed else None
         p, expected = None, (float(g) if g is not None else None)
 
     return Grade(g, p, expected, latency, (data.get("usage") or {}).get("cost"), data.get("provider"))
