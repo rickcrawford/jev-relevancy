@@ -72,7 +72,7 @@ def main() -> None:
 
     if not os.environ.get("TYPESAFE_API_KEY"):
         print("\n  Jev can also be called directly through TypeSafe's API (TYPESAFE_API_KEY);")
-        print("  that path is needed for project 2, where Jev grades results.")
+        print("  that path is needed for steps 7 and 8, where Jev grades results.")
 
 
 if __name__ == "__main__":

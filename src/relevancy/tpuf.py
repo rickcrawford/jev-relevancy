@@ -67,8 +67,8 @@ def ann_rank_by(q: str) -> tuple:
 
 RANK_BY = {
     "bm25": bm25_rank_by,
-    # Deliberately weak: titles only. Project 2 needs a spread of quality
-    # to test whether a judge ranks systems the way humans do.
+    # Deliberately weak: titles only. Step 8 needs a spread of quality to
+    # test whether a judge ranks systems the way humans do.
     "bm25-title": lambda q: ("title", "BM25", q),
     "ann": ann_rank_by,
 }

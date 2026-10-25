@@ -1,4 +1,4 @@
-"""Step 8 (project 2): can a cheap judge rank search systems the way humans do?
+"""Step 8: can a cheap judge rank search systems the way humans do?
 
 Pools the top 10 from the latest run of each configuration on the current
 sample, has each judge grade every pooled (query, result) pair against the

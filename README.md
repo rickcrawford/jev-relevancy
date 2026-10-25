@@ -124,6 +124,7 @@ The scripts double as an example of tpuf-arrow. Most of the calls are in [`src/r
 - [Results](docs/results.md): the 500-query run, judge agreement, turbopuffer performance, and costs
 - [Querying the warehouse](docs/warehouse.md): the tables, things to know, and SQL recipes
 - [Experiments](experiments/README.md): follow-ups on negation, batching, description length, and turbopuffer
+- [Connector design](docs/duckdb-turbopuffer-connector.md): the design that became tpuf-arrow
 
 ## Layout
 
