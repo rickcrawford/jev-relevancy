@@ -94,8 +94,9 @@ onto them directly: `Noul` is a filter, `Choice` a classifier, `Score` a
 ranker. Engines that do this today include LOTUS, Palimpzest, BigQuery's
 `AI.IF` and `AI.CLASSIFY`, Snowflake's `AI_FILTER`, and FlockMTL for DuckDB.
 
-**6. SemBench (VLDB 2026).** 55 queries in 5 scenarios, one of them Amazon
-products, over text, images, and audio. Most of them are filters, plus
+**6. SemBench (VLDB 2026).** 55 queries in 5 scenarios, one of them an
+e-commerce catalogue (a Kaggle fashion dataset, about 44k items), over
+text, images, and audio. Most of them are filters, plus
 joins, classifications, and rankings. Each system is scored on quality,
 dollar cost, and latency, with BigQuery, LOTUS, Palimpzest, and ThalamusDB
 as published baselines. Adding a system means writing one runner class.

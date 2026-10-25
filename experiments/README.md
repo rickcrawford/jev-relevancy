@@ -19,6 +19,8 @@ they never change a run or a judgment the docs report.
 
 [`directions.md`](directions.md) lists public benchmarks where Jev could be
 tested beyond ESCI, as a judge, a reranker, and a database operator.
+[`plans/`](plans/README.md) has a plan for each follow-up, ranked by value
+to customers, with the dataset each uses.
 
 The Jev 1.14.0 follow-up ran the main scripts against a copy of the
 warehouse, so the main runs stay as they were:
