@@ -1,0 +1,17 @@
+title = "Where turbopuffer's time goes"
+premise = "Know where server time goes, whether results repeat, and what ANN gives up, before tuning retrieval."
+status = "done"
+keys = ["TURBOPUFFER_API_KEY"]
+base = true
+decide = "Done: ANN spends 66 of 76 ms embedding; ANN recall 0.994 at 50."
+
+[[steps]]
+name = "measure"
+run = "uv run experiments/turbopuffer-perf/turbopuffer_perf.py"
+paid = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/turbopuffer-perf/turbopuffer_perf.py --report"
+paid = false
+output = "results/turbopuffer_perf.txt"

@@ -1,0 +1,176 @@
+
+## 1. Runs: nDCG@10 standard and condensed, paired against plain hybrid
+
+run            nDCG   cond   R@50  vs hybrid, standard       vs hybrid, condensed        p50 ms  added  server p50/p99 server added
+hybrid        0.367  0.610  0.471  base                      base                           160      0      103/322         0
+voyage        0.463  0.635  0.471  +0.096 [+0.080, +0.111]   +0.025 [+0.019, +0.032]        362    191      248/535       132
+jev           0.452  0.638  0.471  +0.085 [+0.068, +0.102]   +0.029 [+0.021, +0.036]        499    323      103/322         0
+zerank        0.441  0.630  0.471  +0.074 [+0.057, +0.090]   +0.020 [+0.013, +0.027]        412    243      291/533       181
+cohere        0.436  0.625  0.471  +0.070 [+0.054, +0.085]   +0.015 [+0.009, +0.022]        433    258      314/728       197
+gemma         0.435  0.637  0.471  +0.068 [+0.050, +0.085]   +0.027 [+0.019, +0.034]       3520   3298      103/322         0
+ann           0.350  0.583  0.447  -0.017 [-0.032, -0.002]   -0.026 [-0.042, -0.012]        130    -32       75/96        -26
+bm25-title    0.332  0.525  0.388  -0.035 [-0.052, -0.019]   -0.085 [-0.102, -0.069]         69    -91       15/36        -89
+bm25          0.311  0.523  0.384  -0.056 [-0.069, -0.043]   -0.087 [-0.102, -0.072]        156     -7      100/300        -5
+  ann: wall minus server time, min 45 ms, median 54 ms (the laptop's round trip)
+  bm25: wall minus server time, min 44 ms, median 54 ms (the laptop's round trip)
+  bm25-title: wall minus server time, min 45 ms, median 53 ms (the laptop's round trip)
+  hybrid: wall minus server time, min 46 ms, median 54 ms (the laptop's round trip)
+
+## 2. Jev against Voyage, head to head
+
+Jev minus Voyage, standard: -0.011 [-0.022, +0.000], n=500, p=0.081
+Jev minus Voyage, condensed: +0.003 [-0.002, +0.009], n=500, p=0.222
+Per query: Jev better 198, Voyage better 202, tied 100
+Voyage minus zerank, standard: +0.022 [+0.012, +0.031]
+Jev minus cohere, standard: +0.016 [+0.003, +0.028], p=0.022
+Jev minus gemma, standard: +0.018 [+0.005, +0.029], p=0.005
+Jev minus zerank, standard: +0.011 [-0.000, +0.022], p=0.064
+
+## 3. Share of each run's top 10 with no human label
+
+voyage      0.552
+cohere      0.564
+zerank      0.570
+jev         0.583
+gemma       0.595
+hybrid      0.628
+ann         0.653
+bm25-title  0.655
+bm25        0.669
+
+## 4. How many of the 36 run comparisons hold up (paired, standard and condensed)
+
+standard: p<0.05 in 30 of 36; Bonferroni (p<0.0014) in 26
+  not significant after Bonferroni: bm25-title/bm25 (p=0.002), jev/gemma (p=0.005), jev/cohere (p=0.022), hybrid/ann (p=0.037), jev/zerank (p=0.064), voyage/jev (p=0.081), ann/bm25-title (p=0.122), zerank/gemma (p=0.358), zerank/cohere (p=0.408), cohere/gemma (p=0.806)
+condensed: p<0.05 in 31 of 36; Bonferroni (p<0.0014) in 28
+  not significant after Bonferroni: jev/zerank (p=0.002), voyage/zerank (p=0.015), zerank/gemma (p=0.035), zerank/cohere (p=0.070), voyage/jev (p=0.222), jev/gemma (p=0.552), voyage/gemma (p=0.573), bm25-title/bm25 (p=0.765)
+
+## 5. Power: smallest difference 500 queries can detect
+
+Paired standard error between rerankers: 0.0043 to 0.0069
+Minimum detectable difference (80% power, 5% two-sided, 2.8 x SE): 0.012 to 0.019
+
+## 6. Judge bake-off (step 7) with bootstrap intervals
+
+jev:jev-1.14.0                     n=200  exact 0.550 [0.475, 0.620]  within 1 0.775  kappa 0.414 [0.275, 0.535]  r 0.481
+jev-batched:jev-1.13.0             n=200  exact 0.520 [0.455, 0.585]  within 1 0.745  kappa 0.372 [0.252, 0.490]  r 0.449
+jev:jev-1.13.0                     n=200  exact 0.515 [0.445, 0.580]  within 1 0.750  kappa 0.378 [0.250, 0.497]  r 0.456
+google/gemma-3-27b-it              n=200  exact 0.435 [0.375, 0.500]  within 1 0.735  kappa 0.331 [0.195, 0.456]  r 0.344
+meta-llama/llama-4-maverick        n=200  exact 0.410 [0.345, 0.480]  within 1 0.780  kappa 0.372 [0.241, 0.487]  r 0.386
+openai/gpt-4o-mini                 n=200  exact 0.385 [0.320, 0.450]  within 1 0.740  kappa 0.344 [0.223, 0.465]  r 0.399
+meta-llama/llama-3.1-8b-instruct   n=200  exact 0.355 [0.290, 0.425]  within 1 0.660  kappa 0.281 [0.144, 0.405]  r 0.339
+exact, jev 1.13.0 minus google/gemma-3-27b-it: +0.080 [+0.005, +0.160]
+exact, jev 1.13.0 minus meta-llama/llama-4-maverick: +0.105 [+0.035, +0.170]
+exact, jev 1.13.0 minus jev:jev-1.14.0: -0.035 [-0.080, +0.010]
+Test-retest: jev: and jev-batched: on the same 200 pairs (200 queries, so every request held one product) gave a different grade on 4.5%
+
+## 7. Step 8: judges ranking runs, with bootstrap intervals on tau
+
+jev: 5 of 500 queries have no judge nDCG (nothing graded above 0)
+  standard  tau 0.857 [0.714, 1.000]; flipped: voyage/zerank (human gap +0.023), cohere/gemma (human gap +0.001)
+  condensed tau 0.786 [0.643, 0.929]; flipped: voyage/zerank (human gap +0.006), voyage/gemma (human gap -0.002), zerank/gemma (human gap -0.008)
+  of the 28 pairs of runs, 9 are within 0.03 on human nDCG
+gemma: 2 of 500 queries have no judge nDCG (nothing graded above 0)
+  standard  tau 0.857 [0.786, 0.929]; flipped: voyage/jev (human gap +0.010), bm25-title/bm25 (human gap +0.020)
+  condensed tau 0.929 [0.857, 1.000]; flipped: bm25-title/bm25 (human gap +0.002)
+  of the 28 pairs of runs, 9 are within 0.03 on human nDCG
+
+Pool: 15,055 (query, product) pairs; 3,692 (25%) have a human label
+  jev: 3,692 labeled pool pairs, exact 0.599 [0.570, 0.630], kappa 0.436 [0.387, 0.483] (intervals resample queries)
+  gemma: 3,692 labeled pool pairs, exact 0.575 [0.547, 0.600], kappa 0.402 [0.354, 0.445] (intervals resample queries)
+
+## 8. Why pooled agreement (0.60) beats the bake-off (0.52)
+
+human grade  share of pool  Jev exact, pool  Jev exact, bake-off
+0                     8.9%            0.563                0.780
+1                     5.6%            0.585                0.500
+2                    26.7%            0.482                0.440
+3                    58.8%            0.660                0.360
+Pooled agreement reweighted to a balanced mix: 0.572 (observed 0.599, bake-off 0.520)
+
+## 9. A judge's nDCG depends on which runs are scored together
+
+  scored with 4 runs: Voyage under Jev = 0.897
+  scored with 8 runs: Voyage under Jev = 0.861
+  scored with 9 runs: Voyage under Jev = 0.854
+
+## 10. Gain function: does the run order change?
+
+  exp     voyage > jev > zerank > cohere > gemma > hybrid > ann > bm25-title > bm25
+  linear  voyage > jev > zerank > cohere > gemma > hybrid > ann > bm25-title > bm25
+  binary  voyage > jev > zerank > cohere > gemma > hybrid > ann > bm25-title > bm25
+
+## 11. Negation queries
+
+  negation=False  409 queries, Jev called 139 of 2121 human-Exact products Irrelevant (6.6%)
+  negation=True   27 queries, Jev called 43 of 138 human-Exact products Irrelevant (31.2%)
+  blind audit of the 48 exported disagreements: {'yes': 32, 'unclear': 7, 'not_negation': 5, 'no': 4}
+  of the 43 on real negations ("forget me not" removed): product has the excluded thing 32 (74%), doesn't 4, text doesn't say 7
+
+## 12. Batch order and description length (experiments)
+
+  batch order, 3,177 pairs: unchanged 97.7% regraded as is, 97.3% with products reversed
+  jev_800: exact 0.600, kappa 0.410, n=1091
+  jev_4000: exact 0.606, kappa 0.406, n=1091
+
+## 13. Query slices
+
+slice             queries  share  hybrid              best run
+medium|no-brand       278  55.6%   0.370          voyage 0.471
+short|no-brand         83  16.6%   0.299          voyage 0.377
+long|no-brand          58  11.6%   0.293           gemma 0.359
+medium|brand           55  11.0%   0.507          voyage 0.642
+short|brand            15   3.0%   0.348          voyage 0.550
+long|brand             11   2.2%   0.502             jev 0.615
+
+## 14. Billing and warehouse size
+
+  bm25-title   499 queries, 0.85 TB queried
+  bm25         500 queries, 0.85 TB queried
+  ann          500 queries, 0.85 TB queried
+  hybrid       500 queries, 1.71 TB queried
+  gemma        500 queries, not recorded (reranked runs leave billable_bytes empty)
+  jev          500 queries, not recorded (reranked runs leave billable_bytes empty)
+  voyage       500 queries, not recorded (reranked runs leave billable_bytes empty)
+  cohere       500 queries, not recorded (reranked runs leave billable_bytes empty)
+  zerank       500 queries, not recorded (reranked runs leave billable_bytes empty)
+  esci-us-full ann: 1.71 GB billed per query
+  esci-us-full bm25: 1.71 GB billed per query
+  esci-us-full bm25-title: 1.71 GB billed per query
+  esci-us-full hybrid-rrf: 3.42 GB billed per query
+  esci-us-smoke ann: 1.28 GB billed per query
+  esci-us-smoke bm25: 1.28 GB billed per query
+  esci-us-smoke bm25-title: 1.28 GB billed per query
+  esci-us-smoke hybrid-rrf: 2.56 GB billed per query
+  the 9 runs above: 9 recorded git_sha 35727d9-dirty
+  warehouse file: 784 MB
+  docs: 482,105 rows
+  queries: 8,956 rows
+  judgments: 213,958 rows
+  results: 253,672 rows
+  runs: 21 rows
+
+## 15. Jev 1.14.0 against 1.13.0 (from experiments/results/jev114_*.csv)
+
+  as a reranker: 1.14.0 nDCG@10 0.451 against 1.13.0 0.452, paired -0.001 [-0.007, +0.004], n=500
+  as a judge on the same 3,692 labeled pool pairs: exact 0.631 against 0.599, paired +0.031 [+0.019, +0.045] (resampling queries); 1.14.0 kappa 0.471
+  1.13.0 and 1.14.0 give the same grade on 87.8% of those pairs
+
+## 16. Worked examples quoted in the warehouse recipes
+
+  first sampled query "t shirt dresses for women sexy": hybrid top 10 has 2 human labels; Jev called 6 Exact
+  big Jev/Voyage swing: "rose gold series 3 apple watch" Jev 0.728, Voyage 0.000
+  big Jev/Voyage swing: "thinner dvd" Jev 0.080, Voyage 0.748
+  big Jev/Voyage swing: "audi automatic shifter" Jev 0.120, Voyage 0.715
+  pool confusion, human Substitute (2) graded 0 by Jev: 187
+  pool confusion, human Substitute (2) graded 1 by Jev: 40
+  pool confusion, human Substitute (2) graded 2 by Jev: 476
+  pool confusion, human Substitute (2) graded 3 by Jev: 284
+
+## 17. Corpus size and embedding tokens
+
+  embedded text (title. brand. color. first 800 characters of body): 482,105 products, 323,319,587 characters
+  human grades per sampled query: mean 20.5, median 16, n=500
+  first full load: 286,720 products, 42.6M tokens reported by turbopuffer, 42.2 min (1.01M tokens a minute)
+  those products are 171,400,053 characters, 4.02 characters per token (writes finish out of order, so this is approximate)
+  whole corpus at that ratio: about 80M tokens, $1.61 at $0.02 per 1M

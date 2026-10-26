@@ -1,0 +1,30 @@
+title = "Jev 1.14.0 against 1.13.0"
+premise = "Jev 1.14.0 judges and reranks better than 1.13.0."
+status = "done"
+keys = ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = true
+decide = "Done: better judge (+0.031 exact agreement), same reranker (-0.001 nDCG@10)."
+
+[[steps]]
+name = "copy"
+run = "cp warehouse/relevancy.duckdb /tmp/jev114.duckdb"
+paid = false
+
+[[steps]]
+name = "judge"
+run = "RELEVANCY_DB=/tmp/jev114.duckdb uv run scripts/08_judge_runs.py --judge jev-batched:jev-1.13.0 --judge jev-batched:jev-1.14.0 --judge google/gemma-3-27b-it"
+paid = true
+output = "results/judge.txt"
+
+[[steps]]
+name = "rerank"
+run = "RELEVANCY_DB=/tmp/jev114.duckdb uv run scripts/06_rerank.py --model jev:jev-1.14.0"
+paid = true
+output = "results/rerank.txt"
+
+[[steps]]
+name = "score"
+run = "RELEVANCY_DB=/tmp/jev114.duckdb uv run scripts/05_score.py"
+paid = false
+output = "results/score.txt"
+note = "compare the jev:jev-1.14.0 row with jev:jev-1.13.0"

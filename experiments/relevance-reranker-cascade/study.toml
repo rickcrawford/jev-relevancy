@@ -1,0 +1,39 @@
+title = "Reranker ensemble and cascade"
+premise = "Combining rerankers, or escalating only when unsure, matches Voyage for less."
+status = "ready"
+rank = 6
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = true
+decide = "Better: held-out nDCG@10 above Voyage's, lower bound above zero. Same quality, cheaper: TOST within 0.01 and lower serving cost per query."
+
+[[steps]]
+name = "ensembles"
+run = "uv run experiments/relevance-reranker-cascade/cascade.py ensembles"
+paid = false
+output = "results/ensembles.txt"
+
+[[steps]]
+name = "candidates"
+run = "uv run experiments/relevance-reranker-cascade/cascade.py candidates"
+paid = true
+
+[[steps]]
+name = "voyage"
+run = "uv run experiments/relevance-reranker-cascade/cascade.py voyage"
+paid = true
+
+[[steps]]
+name = "jev"
+run = "uv run experiments/relevance-reranker-cascade/cascade.py jev"
+paid = true
+
+[[steps]]
+name = "cascade"
+run = "uv run experiments/relevance-reranker-cascade/cascade.py cascade"
+paid = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/relevance-reranker-cascade/cascade.py report"
+paid = false
+output = "results/report.txt"

@@ -1,0 +1,28 @@
+# A starting rubric for any search corpus. Copy this file, rename it, and
+# edit it to say what "relevant" means for your users. Then point your
+# dataset at it: uv run scripts/02_prepare_custom.py ... --rubric <name>
+#
+# Judges read the rubric like this:
+#   Jev   state = the context, question + item text = one Score question,
+#         levels = the answer choices. Jev returns a probability per level.
+#   LLMs  llm_prompt (or one built from the levels) as the system prompt,
+#         then "Query: ...  <item>: ...  Grade:". Reads one digit's logprobs.
+#
+# Use four levels, lowest first: the grade is the position (0 to 3), and
+# Recall@50 and MRR@10 count grade 2 and up as relevant. A scale with two or
+# three levels adds `grades`, the 0-to-3 grade each level stands for (see
+# rubrics/wands.toml).
+
+state = "Search query: {query}"
+question = "How well does this result answer the search query?"
+item = "Result"
+
+levels = [
+    "Irrelevant: has nothing useful for this query",
+    "Related: on the topic, but doesn't answer the query",
+    "Relevant: answers part of the query, or answers it with gaps",
+    "Perfect: fully answers the query; this is what the searcher wanted",
+]
+
+# Optional. Leave it out and the LLM prompt is built from the levels above.
+# llm_prompt = """..."""

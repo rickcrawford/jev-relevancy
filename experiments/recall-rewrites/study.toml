@@ -1,0 +1,49 @@
+title = "Query rewrites and document expansion"
+premise = "Rewrites and document expansion close vocabulary gaps."
+status = "ready"
+rank = 11
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = true
+decide = "Recall@50 rises with lower bound above zero and nDCG@10 after Voyage doesn't fall. Run only if recall-fusion finds vocabulary misses."
+
+[[steps]]
+name = "rewrite"
+run = "uv run experiments/recall-rewrites/rewrites.py rewrite"
+paid = true
+
+[[steps]]
+name = "drift"
+run = "uv run experiments/recall-rewrites/rewrites.py drift"
+paid = true
+
+[[steps]]
+name = "run"
+run = "uv run experiments/recall-rewrites/rewrites.py run"
+paid = true
+scoped = true
+
+[[steps]]
+name = "expand"
+run = "uv run experiments/recall-rewrites/rewrites.py expand"
+paid = true
+scoped = true
+note = "an LLM call per product; try --scope smoke first"
+
+[[steps]]
+name = "patch-expansion"
+run = "uv run experiments/recall-rewrites/rewrites.py patch-expansion"
+paid = true
+scoped = true
+
+[[steps]]
+name = "run-expansion"
+run = "uv run experiments/recall-rewrites/rewrites.py run-expansion"
+paid = true
+scoped = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/recall-rewrites/rewrites.py report"
+paid = false
+output = "results/report.txt"
+scoped = true

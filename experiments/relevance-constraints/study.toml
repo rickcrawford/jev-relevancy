@@ -1,0 +1,30 @@
+title = "Constraint and negation checks"
+premise = "Checking each query constraint with its own yes/no question closes the Exact/Substitute gap."
+status = "ready"
+rank = 5
+keys = ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = true
+decide = "voyage+checks vs voyage, held-out nDCG@10, lower bound above zero; NevIR test-split pairwise accuracy against 70.1% and 77.3%."
+
+[[steps]]
+name = "extract"
+run = "uv run experiments/relevance-constraints/constraints.py extract"
+paid = true
+
+[[steps]]
+name = "check"
+run = "uv run experiments/relevance-constraints/constraints.py check"
+paid = true
+
+[[steps]]
+name = "report"
+run = "uv run experiments/relevance-constraints/constraints.py report"
+paid = false
+output = "results/report.txt"
+
+[[steps]]
+name = "nevir"
+modules = ["datasets"]
+run = "uv run experiments/relevance-constraints/constraints.py nevir"
+paid = true
+output = "results/nevir.txt"

@@ -1,0 +1,37 @@
+title = "Recall diagnosis and fusion tuning"
+premise = "Relevant products are retrieved but rank below 50; depth and fusion recover them, and the gain survives reranking."
+status = "ready"
+rank = 2
+keys = ["TURBOPUFFER_API_KEY"]
+base = true
+decide = "Primary: in `rerank`'s output, 'best top 100 vs depth 100 top 100' on held-out nDCG@10 has its lower bound above zero, and the condensed line agrees in sign. Stop and investigate first if `check` shows top-50 overlap under 0.95."
+
+[[steps]]
+name = "fetch"
+run = "uv run experiments/recall-fusion/recall_fusion.py fetch"
+paid = true
+output = "results/fetch.txt"
+
+[[steps]]
+name = "check"
+run = "uv run experiments/recall-fusion/recall_fusion.py check"
+paid = false
+output = "results/check.txt"
+
+[[steps]]
+name = "diagnose"
+run = "uv run experiments/recall-fusion/recall_fusion.py diagnose"
+paid = false
+output = "results/diagnose.txt"
+
+[[steps]]
+name = "sweep"
+run = "uv run experiments/recall-fusion/recall_fusion.py sweep"
+paid = false
+output = "results/sweep.txt"
+
+[[steps]]
+name = "rerank"
+run = "uv run experiments/recall-fusion/recall_fusion.py rerank"
+paid = true
+output = "results/rerank.txt"

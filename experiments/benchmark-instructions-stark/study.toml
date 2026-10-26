@@ -1,0 +1,51 @@
+title = "Instruction-following and multi-condition retrieval"
+premise = "Per-condition checks let a cheap model follow multi-condition requests."
+status = "ready"
+rank = 12
+keys = ["TYPESAFE_API_KEY", "OPENROUTER_API_KEY"]
+base = false
+decide = "STaRK: Hit@1 above the best published reranker at similar cost. FollowIR: p-MRR interval above zero."
+
+[[steps]]
+name = "stark-retrieve"
+run = "uv run --with stark-qa --with bm25s experiments/benchmark-instructions-stark/stark.py retrieve"
+paid = false
+note = "downloads STaRK-Amazon; BM25 runs locally"
+
+[[steps]]
+name = "stark-rerank"
+run = "uv run experiments/benchmark-instructions-stark/stark.py rerank"
+paid = true
+
+[[steps]]
+name = "stark-extract"
+run = "uv run experiments/benchmark-instructions-stark/stark.py extract"
+paid = true
+
+[[steps]]
+name = "stark-check"
+run = "uv run experiments/benchmark-instructions-stark/stark.py check"
+paid = true
+
+[[steps]]
+name = "stark-report"
+run = "uv run experiments/benchmark-instructions-stark/stark.py report"
+paid = false
+output = "results/stark.txt"
+
+[[steps]]
+name = "followir-load"
+modules = ["datasets"]
+run = "uv run experiments/benchmark-instructions-stark/followir.py load"
+paid = false
+
+[[steps]]
+name = "followir-rerank"
+run = "uv run experiments/benchmark-instructions-stark/followir.py rerank"
+paid = true
+
+[[steps]]
+name = "followir-report"
+run = "uv run experiments/benchmark-instructions-stark/followir.py report"
+paid = false
+output = "results/followir.txt"

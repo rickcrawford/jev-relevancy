@@ -1,0 +1,52 @@
+[project]
+name = "relevancy"
+version = "0.1.0"
+description = "Search evaluation with Jev as the judge. turbopuffer does the retrieval and hosted reranking, and DuckDB keeps every run and computes the metrics in SQL."
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Rick Crawford" }
+]
+requires-python = ">=3.12"
+keywords = [
+    "search-evaluation", "information-retrieval", "relevance", "ndcg", "llm-as-a-judge", "reranking",
+    "hybrid-search", "vector-search", "bm25", "esci", "turbopuffer", "duckdb", "jev", "python",
+]
+dependencies = [
+    "duckdb>=2.0.0",
+    "httpx>=0.27",
+    "pyarrow>=26.0.0",
+    "python-dotenv>=1.2.4",
+    "tpuf-arrow",
+    "turbopuffer==2.14.0",
+    "typesafe-sdk>=0.7.5",
+]
+
+[project.scripts]
+relevancy = "relevancy.cli:main"
+
+[project.optional-dependencies]
+# Only the studies that use public benchmarks or a trained ranker need these.
+studies = [
+    "datasets>=3.0",
+    "ir-datasets>=0.5.9",
+    "lightgbm>=4.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.15,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyflakes>=4.0.3",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+]
+
+[tool.uv.sources]
+tpuf-arrow = { git = "https://github.com/rickcrawford/tpuf-arrow", rev = "f211dd52bf38a58c34ca2e80c5304b79ea547439" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

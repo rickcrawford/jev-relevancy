@@ -1,0 +1,69 @@
+title = "A second catalog: WANDS"
+premise = "Jev's agreement with human labels holds on Wayfair's catalog."
+status = "ready"
+rank = 1
+keys = ["TURBOPUFFER_API_KEY", "TYPESAFE_API_KEY"]
+base = false
+decide = "Holds if Jev's tau over the runs is at least 0.71 and pooled kappa at least 0.35; fails if tau under 0.60 or kappa under 0.30."
+
+[[steps]]
+name = "download"
+run = "uv run experiments/judge-wands/wands.py download"
+paid = false
+
+[[steps]]
+name = "prepare"
+run = "uv run experiments/judge-wands/wands.py prepare"
+paid = false
+
+[[steps]]
+name = "load"
+run = "uv run relevancy pipeline load --yes --dataset wands --scope full"
+paid = true
+
+[[steps]]
+name = "search"
+run = "uv run relevancy pipeline search --yes --dataset wands --scope full"
+paid = true
+
+[[steps]]
+name = "rerank-voyage"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model voyage/rerank-3"
+paid = true
+
+[[steps]]
+name = "rerank-cohere"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model cohere/rerank-v3.5"
+paid = true
+
+[[steps]]
+name = "rerank-zerank"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model zeroentropy/zerank-2"
+paid = true
+
+[[steps]]
+name = "rerank-jev"
+run = "uv run relevancy pipeline rerank --yes --dataset wands --model jev:jev-1.13.0"
+paid = true
+
+[[steps]]
+name = "bakeoff"
+run = "uv run relevancy pipeline bakeoff --yes --dataset wands --judge jev-batched:jev-1.13.0 --judge jev:jev-1.14.0"
+paid = true
+
+[[steps]]
+name = "judge-runs"
+run = "uv run relevancy pipeline judge-runs --yes --dataset wands --judge jev-batched:jev-1.13.0"
+paid = true
+
+[[steps]]
+name = "score"
+run = "uv run relevancy pipeline score --dataset wands"
+paid = false
+output = "results/score.txt"
+
+[[steps]]
+name = "report"
+run = "uv run experiments/judge-wands/wands.py report"
+paid = false
+output = "results/report.txt"

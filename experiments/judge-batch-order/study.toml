@@ -1,0 +1,12 @@
+title = "Does batch order change Jev's grades?"
+premise = "Product order in a batched Jev request changes the grades."
+status = "done"
+keys = ["TYPESAFE_API_KEY"]
+base = true
+decide = "Done: 97.7% unchanged in the same order, 97.3% reversed, on 3,177 pairs."
+
+[[steps]]
+name = "regrade"
+run = "uv run experiments/judge-batch-order/batch_order.py"
+paid = true
+output = "results/regrade.txt"

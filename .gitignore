@@ -1,0 +1,17 @@
+# secrets
+.env
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# data and the local warehouse (rebuilt by the scripts)
+data/
+warehouse/*.duckdb
+warehouse/*.duckdb.wal
+warehouse/*.parquet
+
+# step logs written by experiments/run.py (run records in results/runs/ are kept)
+experiments/*/results/logs/
+experiments/records/logs/
